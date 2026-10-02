@@ -1,6 +1,6 @@
 # Arachne Ledger
 
-A client-side Arachne profit tracker for Hypixel SkyBlock, built for **Minecraft Java 26.1.2 with Fabric**.
+A client-side **Hypixel SkyBlock Arachne profit tracker** and loot tracker for **Minecraft Java 26.1.2 with Fabric**. Track Crystal and Calling costs, Scavenger coins, net profit, and coins per hour with a customizable HUD and profit graphs.
 
 ## Install
 

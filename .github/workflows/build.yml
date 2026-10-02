@@ -1,4 +1,4 @@
-name: Build and check
+name: Build
 
 on:
   push:
@@ -30,7 +30,7 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: gradle
-      - name: Build and run regression checks
+      - name: Build
         shell: bash
         run: bash ./gradlew --no-daemon --console plain build
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
