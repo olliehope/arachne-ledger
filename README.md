@@ -1,4 +1,4 @@
-# Arachne Ledger 1.0.1
+# Arachne Ledger 1.0.2
 
 Client-side Hypixel SkyBlock Arachne profit tracker for **Minecraft Java 26.1.2 / Fabric**.
 
@@ -9,10 +9,12 @@ Arachne Ledger tracks Arachne fights, loot, costs, and profit with live HUD disp
 ## Install
 
 1. Install Minecraft Java 26.1.2 and Fabric Loader 0.19.5 or newer for that version.
-2. Put Fabric API 0.155.3+26.1.2 and `arachne-ledger-1.0.1.jar` in your Minecraft `mods` folder. When updating, close Minecraft and remove the old Arachne Ledger JAR first. Your existing prices and saved history are preserved.
+2. Put Fabric API 0.155.3+26.1.2 and `arachne-ledger-1.0.2.jar` in your Minecraft `mods` folder. When updating, close Minecraft and remove the old Arachne Ledger JAR first. Your existing prices and saved history are preserved.
 3. Start the game and join Hypixel SkyBlock. Press **O** or type `/arachne` to open the dashboard.
 
 The mod requires Java 25, as Minecraft 26.1.2 does. The HUD appears while you are in Arachne's Sanctuary. Keybindings are configurable in Minecraft Controls.
+
+Optionally install [Mod Menu](https://github.com/TerraformersMC/ModMenu) for Minecraft 26.1.2. Its **Arachne Ledger → Configure** button opens Prices, with access to salvage settings. It works from the title screen or in game; **Back** returns to Mod Menu. The tracker also works without Mod Menu installed.
 
 ## What it tracks
 
@@ -103,7 +105,7 @@ Pets and other items absent from the Bazaar retain manual values. No Auction Hou
 
 ## Rare-drop titles
 
-A detected **Arachne's Fang**, **Epic Tarantula**, or **Legendary Tarantula** shows a fading title with its recorded drop value to the right. Fang uses Uncommon green, Epic uses dark purple and Legendary uses gold. An item without a price shows **Unpriced**. The value is the drop's value, not the whole fight's net profit. Alerts queue when several rare drops appear and do not overwrite server titles. Hologram colours are preserved so a plain `[Lvl 1] Tarantula` label can be assigned its supported rarity safely. Explicit `Epic Tarantula Pet` and `Legendary Tarantula Pet` names also identify rarity, without needing a colour code.
+A detected **Arachne's Fang**, **Epic Tarantula**, or **Legendary Tarantula** shows a fading title with its recorded drop value to the right. Fang uses Uncommon green, Epic uses dark purple and Legendary uses gold. An item without a price shows only its centred item title, with no value or Unpriced label. The value is the drop's value, not the whole fight's net profit. Alerts queue when several rare drops appear and do not overwrite server titles. Hologram colours are preserved so a plain `[Lvl 1] Tarantula` label can be assigned its supported rarity safely. Explicit `Epic Tarantula Pet` and `Legendary Tarantula Pet` names also identify rarity, without needing a colour code.
 
 Personal `You claimed a Tarantula Pet! You can manage your Pets...` receipts are also detected during the 45 seconds after Arachne's death. Their original rarity colour or an explicit Epic/Legendary name is required. Matching pet labels, pickups, and claims are recorded once across that reward window, in any arrival order. Repeated claim messages cannot add another copy. Claims outside a boss reward window, other players' messages, and unknown rarities are ignored.
 
@@ -138,9 +140,13 @@ The armor stand scan covers the visible Arachne rewards for 45 seconds after the
 
 For development, start with the [code walkthrough](docs/ARCHITECTURE.md#reading-the-code) and [source-style guide](CONTRIBUTING.md#source-style). Run `./gradlew formatJava` or `.\gradlew.bat formatJava` before committing Java changes. Builds check formatting automatically.
 
-In this directory, run `gradlew.bat build` on Windows or `./gradlew build` on macOS/Linux using JDK 25. The build produces `build/libs/arachne-ledger-1.0.1.jar`. **1,436 checks across 19 regression suites passed**, covering accounting, graph series/labels/projections/spawn markers, price-mode selection and caches, location and reward detection, spawn/summoning/AFK timing, purse pairing, NPC/salvage valuations, damage qualification, chat summaries, persistent history/corrections, isolation, migration, Bazaar failure fallback, pet rarity labels, and rare-drop title deduplication.
+In this directory, run `gradlew.bat build` on Windows or `./gradlew build` on macOS/Linux using JDK 25. The build produces `build/libs/arachne-ledger-1.0.2.jar`. **1,441 checks across 19 regression suites passed**, covering accounting, graph series/labels/projections/spawn markers, price-mode selection and caches, location and reward detection, spawn/summoning/AFK timing, purse pairing, NPC/salvage valuations, damage qualification, chat summaries, persistent history/corrections, isolation, migration, Bazaar failure fallback, pet rarity labels, and rare-drop title deduplication.
 
 Run `gradlew.bat clean prepareRelease` to create the installable JAR, complete source ZIP, changelog notes and SHA-256 checksums in `build/release`. On Linux/macOS, use `bash ./gradlew clean prepareRelease`. The included GitHub workflows build pull requests and prepare a draft prerelease when you push a matching `v<version>` tag. Read [Publishing and releases](docs/RELEASING.md) before your first upload.
+
+Use `gradlew.bat stageRelease` (or `./gradlew stageRelease`) to also copy those four assets into the project-root `1.0.2` folder. Versioned release folders are generated locally and excluded from Git and the source ZIP.
+
+The 1.0.2 local client checks passed **136 synthetic checks** with Mod Menu 18.0.2 installed and absent. They exercised Mod Menu's actual configuration registry and Mods screen, out-of-world price saves/reload, disabled repricing without a ledger, retained drafts, and returning to the exact parent. Settings and priced/unpriced RNG titles were captured at GUI scales 2 and 4. Hidden-price and unpriced popup images match exactly, confirming the omitted value reserves no gap. No live Hypixel server was joined.
 
 The 1.0.1 local Minecraft client check passed **52 synthetic UI interaction checks**, with 11 screenshots inspected at GUI scales 2 and 4. It verified retained price/quantity drafts on resize and navigation, fixed/recipe switching, corrections, visible fight-row clicks, edit availability after damage results, graph rendering, and real filesystem failure feedback. Failed saves stay visible and do not print success; blocked mutations cannot be repeated, while diagnostics remain available. No live Hypixel server was joined.
 

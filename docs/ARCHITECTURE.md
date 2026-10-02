@@ -2,7 +2,7 @@
 
 Arachne Ledger uses one journal for all financial values. Minecraft adapters observe events; Tracker decides whether they are eligible and which fight owns them; Ledger records and calculates them; the UI reads those results. The mod never controls combat or movement.
 
-All Java classes below are in `dev.arachneledger`, apart from the `mixin` subpackage.
+All Java classes below are in `dev.arachneledger`, apart from the `mixin` and `integration` subpackages.
 
 ## Reading the code
 
@@ -23,6 +23,7 @@ Build logic is separated too: `build.gradle` declares compilation and regression
 | Component | Responsibility and boundary |
 | --- | --- |
 | `ArachneLedger` | Fabric initialization, client events/keybindings, deferred screen requests, HUD registration, and context preparation. `prepareContext` handles a world/account change before packets or ticks can reuse an old fight. |
+| `integration.ModMenuIntegration` | Optional Mod Menu entrypoint. Its lazy screen factory opens the existing Prices screen with the supplied parent. The API is compile-only and stays out of normal client initialization, so the tracker starts without Mod Menu installed. |
 | `LedgerCommands` | Builds the client Brigadier command tree from an explicit Tracker and `Actions` callbacks for dashboard, HUD editor, context refresh, diagnostics, and local messages. Command registration does not own a second tracker. |
 | `ClientMessages` | Formats local chat and kill summaries, and writes a supplied location snapshot to a diagnostic file. Compatibility delegates remain in ArachneLedger. |
 | `GameContext`, `LocationDetection`, `TrackingArea` | Read the active sidebar/tab/server context, normalize server text, and decide whether location or temporary boss evidence permits tracking. Explicit other areas and world changes clear that evidence. |
@@ -39,7 +40,7 @@ Build logic is separated too: `build.gradle` declares compilation and regression
 | `Config`, `Store` | Validate settings and saved data, select effective valuations, migrate older fields, and write JSON with a backup and atomic replacement where supported. |
 | `GearValuation`, `ValuationScreen` | GearValuation selects the NPC/manual-sale or 5-Spider-Essence basis for base armor and Arack. ValuationScreen saves separate armor/weapon settings and the Scavenger toggle; it never initiates a sale or salvage action. |
 | `BazaarPrices` | Fetches optional public price snapshots off the client thread, validating instant-sell and sell-offer sides independently. Its client-thread `tick` applies both caches; Config selects the mode only after manual-price priority. A supplier/executor boundary permits deterministic fixtures. |
-| `RngAlerts` | Queues accepted rare rewards and renders local fading titles with recorded values. It does not modify server titles or financial records. |
+| `RngAlerts` | Queues accepted rare rewards and renders local fading titles with optional recorded values. Unpriced captions are empty and reserve no layout space. It does not modify server titles or financial records. |
 | `Hud`, `Graph`, screens | Present Ledger/Analytics results and call Tracker/Config operations. FightDetailsScreen and FightEditScreen use journal-derived fight values and absolute quantity edits. |
 
 ## Event flow

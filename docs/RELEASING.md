@@ -30,8 +30,8 @@ Protect `master` with pull requests and successful `Build and check` jobs when a
 
 For each release:
 
-1. Change `version` in `gradle.properties`. The release checks accept versions such as `1.0.0` and `1.0.1`; preserve the exact chosen string in filenames, metadata, and tags. Use a patch such as `1.0.1` for fixes, a minor version such as `1.1` for added features, and a major version for a deliberate breaking change. Keep save migration and backups even across major releases.
-2. Add a matching section such as `## [1.0.1]` to `CHANGELOG.md`. Describe completed changes and any migration or known limitation.
+1. Change `version` in `gradle.properties`. The release checks accept versions such as `1.0.0` and `1.0.2`; preserve the exact chosen string in filenames, metadata, and tags. Use a patch such as `1.0.2` for fixes, a minor version such as `1.1` for added features, and a major version for a deliberate breaking change. Keep save migration and backups even across major releases.
+2. Add a matching section such as `## [1.0.2]` to `CHANGELOG.md`. Describe completed changes and any migration or known limitation.
 3. Update the README's install filename/version and any changed behavior. Dependency versions also live in `gradle.properties`; advertise only Minecraft versions that were actually built and tested.
 4. Run the release task with JDK 25:
 
@@ -52,6 +52,8 @@ The `build/release` directory contains:
 
 The task checks the JAR's version, Minecraft target and client-only metadata. It rejects bundled game classes and the local preview fixture. Local game data, logs, settings, credentials and build caches are excluded from the source archive.
 
+For a local folder named after the release version, run `.\gradlew.bat stageRelease` or `./gradlew stageRelease`. This prepares the same assets and copies them into `1.0.2` at the project root. These generated version folders are ignored by Git; distribute the JAR, not the source ZIP, to players.
+
 Before a public stable release, test a normal farming session in Hypixel: Sanctuary entry/exit, your own placements, another player's completed summon, spawn/AFK timing, qualifying and skipped kills, rewards versus inventory, world changes, and an actual price refresh. Compare marked purse gains against Scavenger income and menu exclusions, and check NPC/salvage values without rewriting earlier entries. For 1.0.0, verify basic fight tracking, HUD display, and profit calculation. Local checks do not replace this. See [CONTRIBUTING](../CONTRIBUTING.md) for the acceptance scenarios.
 
 ## 4. Create the GitHub release
@@ -59,11 +61,11 @@ Before a public stable release, test a normal farming session in Hypixel: Sanctu
 After committing the release changes and pushing `master`, create and push the matching tag. For this version:
 
 ```powershell
-git tag -a v1.0.1 -m "Arachne Ledger 1.0.1"
-git push origin v1.0.1
+git tag -a v1.0.2 -m "Arachne Ledger 1.0.2"
+git push origin v1.0.2
 ```
 
-The **Prepare GitHub release** workflow rebuilds and checks the tagged commit. The tag must equal `v` plus the exact version in `gradle.properties`; `v1.0.1` or `v1.0.0-beta` against a `1.0.0` build fails before any release is created.
+The **Prepare GitHub release** workflow rebuilds and checks the tagged commit. The tag must equal `v` plus the exact version in `gradle.properties`; `v1.0.2` or `v1.0.0-beta` against a `1.0.0` build fails before any release is created.
 
 When successful, it creates a **draft prerelease** with the installable JAR, full source ZIP, checksums and changelog notes. Open GitHub's Releases page, inspect the draft, and publish it when ready. Keep the prerelease label for the initial beta; remove it only when you intend a stable release. A tag alone does not publish this draft. This uses GitHub's built-in Actions token with write access restricted to the release job. [GitHub release documentation](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository)
 
@@ -77,13 +79,14 @@ For a version, use these settings:
 
 | Setting | Value for this build |
 | --- | --- |
-| Primary file | `arachne-ledger-1.0.1.jar` |
-| Version number | `1.0.1` |
+| Primary file | `arachne-ledger-1.0.2.jar` |
+| Version number | `1.0.2` |
 | Release channel | Beta until live acceptance testing is complete |
 | Loader | Fabric |
 | Game version | Minecraft Java `26.1.2` |
 | Environment | Client only; no server installation |
 | Required dependency | Fabric API |
+| Optional dependency | Mod Menu for Minecraft 26.1.2 |
 | Description requirements | Java 25 and Fabric Loader 0.19.5 or newer |
 | Changelog | The corresponding `build/release/notes.md` text |
 
@@ -95,4 +98,4 @@ The first upload is manual. After a project exists and its visibility is resolve
 
 ## Release status
 
-Version 1.0.1's automated checks and client-verification status are recorded in the README. The project is now live on GitHub with v1.0.0 released. Existing entries retain their recorded values and saved manual overrides; Bazaar mode changes affect future values unless the session is explicitly repriced, and graph preferences change display only. The GitHub repository is now active and accepting contributions.
+Version 1.0.2's automated checks and client-verification status are recorded in the README. The project is now live on GitHub with v1.0.0 released. Existing entries retain their recorded values and saved manual overrides; Bazaar mode changes affect future values unless the session is explicitly repriced, and graph preferences change display only. The GitHub repository is now active and accepting contributions.

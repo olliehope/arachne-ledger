@@ -87,17 +87,32 @@ public final class RngAlertsChecks {
         eq(1, alerts.queued(), "Expired first title removed");
         yes(alerts.current(now + 8000) == null, "Queue expires fully");
         yes(alerts.notice("TARANTULA_LEGENDARY", 1, 0, now + 9000), "Unpriced pet still alerts");
+        eq("", alerts.current(now + 9200).valueText(), "Unknown value has no price caption");
         eq(
-                "Unpriced",
-                alerts.current(now + 9200).valueText(),
-                "Unknown value is not displayed as zero profit");
+                "Tarantula Pet (Legendary)",
+                alerts.current(now + 9200).title(),
+                "Unpriced pet keeps its title");
+        eq(0xFFFFAA00, alerts.current(now + 9200).color(), "Unpriced pet keeps its rarity colour");
         alerts.clear();
         eq(0, alerts.queued(), "Context reset empties queue");
         alerts.notice("ARACHNE_FANG", 1, Double.NaN, now);
-        eq("Unpriced", alerts.current(now + 200).valueText(), "Non-finite price safe");
+        eq("", alerts.current(now + 200).valueText(), "NaN price has no price caption");
         alerts.clear();
         alerts.notice("ARACHNE_FANG", 1, -1, now);
-        eq("Unpriced", alerts.current(now + 200).valueText(), "Negative price safe");
+        eq("", alerts.current(now + 200).valueText(), "Negative price has no price caption");
+        alerts.clear();
+        alerts.notice("TARANTULA_EPIC", 1, Double.POSITIVE_INFINITY, now);
+        eq("", alerts.current(now + 200).valueText(), "Infinite price has no price caption");
+        alerts.clear();
+        alerts.notice("ARACHNE_FANG", 2, Double.MAX_VALUE, now);
+        eq(
+                "",
+                alerts.current(now + 200).valueText(),
+                "Overflowed reward value has no price caption");
+        eq(
+                "2x Arachne's Fang",
+                alerts.current(now + 200).title(),
+                "Invalid reward value still preserves item quantity");
         alerts.clear();
         for (int i = 0; i < 8; i++) {
             yes(alerts.notice("ARACHNE_FANG", 1, 1, now), "Bounded queue accepts reward " + i);

@@ -358,9 +358,9 @@ public final class PetRewardChecks {
                 "Explicit zero is saved without a guessed value");
         eq(1L, zero.ledger.stats(false).unpriced(), "Zero valuation remains visible as unpriced");
         eq(
-                "Unpriced",
+                "",
                 zero.rng.current(DOWN + 300).valueText(),
-                "Unpriced pet still shows a rarity title");
+                "Unpriced pet title omits the price caption");
 
         Tracker unpriced = rewardWindow();
         unpriced.config.prices.remove(EPIC);
@@ -368,9 +368,9 @@ public final class PetRewardChecks {
         eq(1L, petCount(unpriced, EPIC), "Claim records an unpriced pet");
         amount(0, unpriced.ledger.stats(false).revenue(), "Unpriced pet does not fabricate profit");
         eq(
-                "Unpriced",
+                "",
                 unpriced.rng.current(DOWN + 300).valueText(),
-                "Original receipt triggers an unpriced title");
+                "Original receipt triggers a title without a guessed price");
 
         Tracker noTitles = rewardWindow();
         noTitles.config.rngTitles = false;

@@ -2,13 +2,18 @@
 
 Public GitHub releases start at 1.0.0. Earlier development builds used separate numbering and are retained below for reference.
 
-## [Unreleased]
+## [1.0.2]
 
+- Hid the value on unpriced rare-drop titles; the rarity-coloured item title remains centred and priced drops retain their optional coin value.
+- Added optional Mod Menu integration: Configure opens Prices, including salvage settings, and Back returns to Mod Menu. Mod Menu is not required to run the tracker.
+- Disabled session repricing until a healthy account ledger is loaded, preventing misleading success messages when settings are opened from the title screen.
+- Added `stageRelease` to place the installable JAR, complete source ZIP, release notes and checksums in a local version-named folder.
 - Reformatted production and regression Java sources consistently, expanded compressed statements, and made control-flow blocks explicit.
 - Replaced opaque tracking/UI names with domain names; split lifecycle, corrections, validation, and rendering into focused methods while preserving saved data and behavior.
 - Shared journal-derived fight/session arithmetic in `LedgerTotals` and separated release/formatter build logic from normal compilation.
 - Added a pinned build-time formatter, automatic format checking, a source-style guide, and a reading path through the modules.
-- Verified all 1,436 existing regression checks and 52 synthetic Minecraft UI interactions. Nine screenshots match the previous build exactly; two differ only in their displayed fight timestamps.
+- Verified all 1,441 checks across 19 regression suites and 136 local client checks with and without Mod Menu 18.0.2, including settings saves/navigation and priced/unpriced titles at two GUI scales. Live Hypixel acceptance remains pending.
+- The readability refactor passed all 1,436 existing regression checks and 52 synthetic Minecraft UI interactions. Nine screenshots match the previous build exactly; two differ only in their displayed fight timestamps.
 
 ## [1.0.1]
 

@@ -8,12 +8,23 @@ base {
 
 repositories {
     mavenCentral()
+    maven {
+        name = 'Terraformers'
+        url = 'https://maven.terraformersmc.com/'
+        content {
+            includeGroup 'com.terraformersmc'
+        }
+    }
 }
 
 dependencies {
     minecraft "com.mojang:minecraft:${minecraft_version}"
     implementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
     implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+    // The optional entrypoint compiles against the API without installing or bundling Mod Menu.
+    compileOnly("com.terraformersmc:modmenu:${mod_menu_version}") {
+        transitive = false
+    }
 }
 
 java {

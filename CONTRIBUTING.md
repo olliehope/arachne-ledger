@@ -22,6 +22,8 @@ On macOS or Linux:
 
 The first build needs access to the configured dependency repositories. After the dependencies and game assets are cached, `--offline` can be useful; it is optional and cannot replace an initial download. Do not check in machine-specific Gradle cache paths or JDK locations. The development client uses the local `run/` directory; do not commit its settings, logs, worlds, or account data.
 
+Mod Menu is compile-only. To exercise its configuration button in the development client, place Mod Menu 18.0.2 for Minecraft 26.1.2 in `run/mods`, then run `runClient`. Also verify startup with that JAR absent. The optional entrypoint lives in `integration.ModMenuIntegration`; keep Mod Menu API references there so normal initialization does not require it.
+
 ## Changes and verification
 
 Keep changes focused. Preserve saved-data compatibility and the accounting invariants in the architecture document. Prefer a small helper with an explicit input/output over another responsibility in the Fabric entry point or Tracker. Explain why a comment matters—such as a packet ordering rule, migration constraint, or ownership invariant—rather than narrating every line.

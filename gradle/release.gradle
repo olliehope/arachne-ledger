@@ -91,3 +91,16 @@ tasks.register('prepareRelease') {
         logger.lifecycle("Release assets prepared in ${releaseDir}")
     }
 }
+
+// Keep a convenient local version folder without committing generated binaries.
+tasks.register('stageRelease', Copy) {
+    group = 'distribution'
+    description = 'Prepare the release and copy its four assets into a version-named project folder.'
+    dependsOn prepareRelease
+    from(releaseLocation) {
+        include "arachne-ledger-${releaseVersion}.jar"
+        include "arachne-ledger-${releaseVersion}-source.zip"
+        include 'notes.md', 'SHA256SUMS'
+    }
+    into(layout.projectDirectory.dir(releaseVersion))
+}

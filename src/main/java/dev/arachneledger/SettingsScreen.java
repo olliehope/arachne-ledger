@@ -265,7 +265,7 @@ public final class SettingsScreen extends Screen {
                                 note = "Saved. New drops use these prices.";
                             }
                         }));
-        addRenderableWidget(
+        var repriceSessionButton =
                 new FlatButton(
                         panelX + 20 + actionButtonWidth,
                         panelY + 205,
@@ -288,7 +288,17 @@ public final class SettingsScreen extends Screen {
                                     note = "Session repriced; older sessions unchanged.";
                                 }
                             }
-                        }));
+                        });
+        repriceSessionButton.active = tracker.ready() && "".equals(tracker.error);
+        if (!repriceSessionButton.active) {
+            repriceSessionButton.setTooltip(
+                    Tooltip.create(
+                            Component.literal(
+                                    "".equals(tracker.error)
+                                            ? "Join a world to load an account ledger before repricing a session."
+                                            : "Resolve the storage error before repricing. See the Minecraft log.")));
+        }
+        addRenderableWidget(repriceSessionButton);
         addRenderableWidget(
                 new FlatButton(
                         panelX + 24 + actionButtonWidth * 2,

@@ -57,8 +57,7 @@ public final class RngAlerts {
                                 (DURATION_MILLIS - age) / (double) FADE_OUT_MILLIS));
         String title =
                 (notice.count() > 1 ? notice.count() + "x " : "") + Catalog.name(notice.item());
-        String value =
-                notice.value() > 0 ? "+" + Format.coins(notice.value()) + " coins" : "Unpriced";
+        String value = notice.value() > 0 ? "+" + Format.coins(notice.value()) + " coins" : "";
         return new Display(
                 notice.item(), title, value, rarityColor(notice.item()), Math.max(0, alpha));
     }
@@ -117,24 +116,25 @@ public final class RngAlerts {
         }
         var font = Minecraft.getInstance().font;
         var title = Component.literal(display.title()).withStyle(ChatFormatting.BOLD);
+        // Omitted values reserve no gap, so the item title remains centered by itself.
+        boolean drawValue = showValue && !display.valueText().isEmpty();
         int titleWidth = font.width(title),
-                gap = showValue ? 10 : 0,
-                valueWidth = showValue ? font.width(display.valueText()) : 0;
+                gap = drawValue ? 10 : 0,
+                valueWidth = drawValue ? font.width(display.valueText()) : 0;
         int totalWidth = titleWidth + gap + valueWidth;
         float scale = (float) Math.min(2, Math.max(.5, (graphics.guiWidth() - 24.0) / totalWidth));
-        int valueColor = display.valueText().equals("Unpriced") ? 0xFFAAAAAA : 0xFF55FF55;
         graphics.pose().pushMatrix();
         graphics.pose().translate(graphics.guiWidth() / 2f, graphics.guiHeight() * .35f);
         graphics.pose().scale(scale);
         int left = -totalWidth / 2;
         graphics.text(font, title, left, 0, faded(display.color(), display.alpha()), true);
-        if (showValue) {
+        if (drawValue) {
             graphics.text(
                     font,
                     display.valueText(),
                     left + titleWidth + gap,
                     0,
-                    faded(valueColor, display.alpha()),
+                    faded(0xFF55FF55, display.alpha()),
                     true);
         }
         String heading = "RARE DROP!";
