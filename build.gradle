@@ -81,4 +81,3 @@ tasks.named('jar') {
 }
 
 apply from: 'gradle/java-format.gradle'
-apply from: 'gradle/release.gradle'
