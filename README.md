@@ -1,15 +1,15 @@
-# Arachne Ledger 1.8
+# Arachne Ledger 1.0.0
 
 Client-side Hypixel SkyBlock Arachne profit tracker for **Minecraft Java 26.1.2 / Fabric**.
 
-[Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Architecture and extension guide](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md) · [Publishing and releases](docs/RELEASING.md)
+[GitHub](https://github.com/olliehope/arachne-ledger) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Architecture and extension guide](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md) · [Publishing and releases](docs/RELEASING.md)
 
-Version 1.8 adds instant-sell/sell-offer Bazaar estimates and shared graph options for profit, loot, costs, projections, spawn markers, and text rows. Existing history and manual price overrides are preserved. For GitHub setup and tag/release steps, use the publishing guide. This source has substantial AI-generated contributions; the guide explains how Modrinth's current listing policy affects publication.
+Arachne Ledger tracks Arachne fights, loot, costs, and profit with live HUD display and detailed history. Features include Bazaar price integration, customizable valuation, session management, and comprehensive profit analysis. This source has substantial AI-generated contributions.
 
 ## Install
 
 1. Install Minecraft Java 26.1.2 and Fabric Loader 0.19.5 or newer for that version.
-2. Put Fabric API 0.155.3+26.1.2 and `arachne-ledger-1.8.jar` in your Minecraft `mods` folder. When updating, close Minecraft and remove the old Arachne Ledger JAR first. Your existing prices and saved history are preserved.
+2. Put Fabric API 0.155.3+26.1.2 and `arachne-ledger-1.0.0.jar` in your Minecraft `mods` folder. When updating, close Minecraft and remove the old Arachne Ledger JAR first. Your existing prices and saved history are preserved.
 3. Start the game and join Hypixel SkyBlock. Press **O** or type `/arachne` to open the dashboard.
 
 The mod requires Java 25, as Minecraft 26.1.2 does. The HUD appears while you are in Arachne's Sanctuary. Keybindings are configurable in Minecraft Controls.
