@@ -3,6 +3,8 @@
 build/
 out/
 *.class
+# Built documentation
+/site/
 # Local versioned release folders
 /[0-9]*.[0-9]*.[0-9]*/
 

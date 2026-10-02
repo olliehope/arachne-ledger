@@ -31,6 +31,6 @@ For a new achievement, add a stable entry in `Achievements.definitions()`; add a
 
 `HistoryIndex` joins receipts to immutable fight snapshots once per calculation, sharing qualification and detected-source rules with achievements and records. `ProfitBreakdown`, `SessionSummary`, and `PersonalRecords` are independent of Minecraft.
 
-Wiki sources are maintained in `docs/wiki`. GitHub's wiki is a separate Git repository; a source-repository commit does not publish wiki changes automatically.
+Documentation sources are maintained in `docs/wiki` and built with MkDocs. The docs workflow automatically deploys documentation changes to [GitHub Pages](https://olliehope.github.io/arachne-ledger/); navigation and site settings live in the root `mkdocs.yml`.
 
 For a release, update the version and changelog, run a clean build, then upload the installable JAR to GitHub Releases or Modrinth.

@@ -38,7 +38,7 @@ Both estimates are before tax. Prices refresh at most once every five minutes, w
 
 Choose armor and tools/weapons separately on **Salvage**. NPC mode uses the saved sale value. Salvage mode values each base Arachne armor piece or Arack as **5 Spider Essence**, using your essence price. The two values are not added together. Switching back preserves the saved sale-price override.
 
-These settings value drops; they do not sell or salvage items. Upgraded gear bonuses are not inferred from floating labels. **Scavenger coins** controls the eligible marked purse income described in [Tracking and profit](https://github.com/olliehope/arachne-ledger/wiki/Tracking-and-Profit).
+These settings value drops; they do not sell or salvage items. Upgraded gear bonuses are not inferred from floating labels. **Scavenger coins** controls the eligible marked purse income described in [Tracking and profit](tracking-and-profit.md).
 
 ## Notifications and participation
 
@@ -54,6 +54,6 @@ The default minimum damage is **10,000**. `/arachne mindamage <damage>` also cha
 
 `/arachne session` and `/arachne total` choose the displayed scope. `/arachne new` begins a new session without deleting lifetime totals. `/arachne pause` stops automatic tracking and its active timer.
 
-Open **Journal → Recaps & records** from the dashboard, or run `/arachne recap`, for **Current**, **Last session**, and **Records**. Current and Records have their own Session/Total scope buttons. Last session is the frozen summary captured before the reset; the latest 20 active session summaries are saved. **Journal → Achievements** or `/arachne achievements` opens lifetime milestones. **Journal → Tracking diagnostics** or `/arachne diagnostics` opens the [diagnostics page](https://github.com/olliehope/arachne-ledger/wiki/Diagnostics). The graph tab keeps its Options button; switch to Overview, Drops, or Fights for Journal.
+Open **Journal → Recaps & records** from the dashboard, or run `/arachne recap`, for **Current**, **Last session**, and **Records**. Current and Records have their own Session/Total scope buttons. Last session is the frozen summary captured before the reset; the latest 20 active session summaries are saved. **Journal → Achievements** or `/arachne achievements` opens lifetime milestones. **Journal → Tracking diagnostics** or `/arachne diagnostics` opens the [diagnostics page](diagnostics.md). The graph tab keeps its Options button; switch to Overview, Drops, or Fights for Journal.
 
 Saves are separate per Minecraft account. If you change SkyBlock profiles on the same account, use `/arachne profile <name>` to select a separate ledger. Profile names use 1–32 letters, digits, `_`, or `-`; the server profile is not selected automatically.

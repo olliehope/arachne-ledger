@@ -1,0 +1,54 @@
+site_name: Arachne Ledger Wiki
+site_description: Hypixel SkyBlock Arachne profit tracker guides for loot, summon costs, coins per hour, HUD settings, and achievements.
+site_url: https://olliehope.github.io/arachne-ledger/
+repo_url: https://github.com/olliehope/arachne-ledger
+repo_name: olliehope/arachne-ledger
+edit_uri: edit/master/docs/wiki/
+
+docs_dir: docs/wiki
+site_dir: site
+
+theme:
+  name: material
+  language: en
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue grey
+      accent: cyan
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue grey
+      accent: cyan
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - content.code.copy
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Settings: settings.md
+  - Tracking and profit: tracking-and-profit.md
+  - Achievements: achievements.md
+  - Diagnostics: diagnostics.md
+  - Troubleshooting: troubleshooting.md
+  - Development: development.md
+
+strict: true

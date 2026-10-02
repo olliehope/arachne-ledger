@@ -28,4 +28,4 @@ Existing saved observations fill achievements silently on the first load. Import
 
 New live unlocks can print a local notification after their state is saved. Turn **Achievement chat** off in **Settings → Tracking** to hide these messages. Unlocks still progress and are acknowledged while notifications are off, so enabling the setting does not replay them.
 
-Earned achievements stay earned if receipts are later corrected or removed. Progress toward locked goals follows the remaining trusted observations. [Personal records](https://github.com/olliehope/arachne-ledger/wiki/Tracking-and-Profit#session-recaps-and-personal-records) are recalculated from current receipts instead.
+Earned achievements stay earned if receipts are later corrected or removed. Progress toward locked goals follows the remaining trusted observations. [Personal records](tracking-and-profit.md#session-recaps-and-personal-records) are recalculated from current receipts instead.

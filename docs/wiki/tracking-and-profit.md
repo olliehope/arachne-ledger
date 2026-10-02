@@ -57,4 +57,4 @@ Starting a new session captures the previous summary before resetting its bounda
 
 The best tracked session groups fight-associated receipts by their saved session IDs. It subtracts associated costs from unsuccessful attempts, and includes rewards only from qualifying kills. Unassociated historical receipts cannot be assigned to a past session, so this record can differ from a full financial session recap. Negative results are shown as recorded rather than replaced with zero.
 
-Personal records are recalculated after late rewards, explicit repricing, undo, or corrections. [Achievements](https://github.com/olliehope/arachne-ledger/wiki/Achievements) keep earned milestones once unlocked.
+Personal records are recalculated after late rewards, explicit repricing, undo, or corrections. [Achievements](achievements.md) keep earned milestones once unlocked.

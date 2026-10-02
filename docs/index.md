@@ -1,5 +1,5 @@
 # Arachne Ledger documentation
 
-The user guide is maintained in the [GitHub wiki](https://github.com/olliehope/arachne-ledger/wiki).
+Read the [Arachne Ledger Wiki](https://olliehope.github.io/arachne-ledger/) for installation, settings, tracking, and troubleshooting.
 
-The same pages are available in this repository: [Home](wiki/Home.md), [Settings](wiki/Settings.md), [Tracking and profit](wiki/Tracking-and-Profit.md), [Achievements](wiki/Achievements.md), [Diagnostics](wiki/Diagnostics.md), [Troubleshooting](wiki/Troubleshooting.md), and [Development](wiki/Development.md).
+Documentation sources are in [wiki](wiki). The site uses Material for MkDocs and publishes through GitHub Pages when these files change.
