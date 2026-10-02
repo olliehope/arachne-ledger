@@ -82,6 +82,30 @@ public final class RngAlertsChecks {
         for (int i = 0; i < 8; i++) yes(alerts.notice("ARACHNE_FANG", 1, 1, now), "Bounded queue accepts reward " + i);
         yes(!alerts.notice("ARACHNE_FANG", 1, 1, now), "Queue protects against unbounded titles");
         eq(8, alerts.queued(), "Queue bound preserved");
+
+        alerts.clear();
+        alerts.notice("TARANTULA_LEGENDARY", 1, 5_000_000, now);
+        alerts.setVisible(false, now + 500);
+        eq("TARANTULA_LEGENDARY", alerts.current(now + 20_000).item(), "An open menu cannot expire an unseen title");
+        yes(alerts.current(now + 20_000).alpha() == 1, "A hidden title keeps its visible fade position");
+        alerts.setVisible(true, now + 20_000);
+        yes(alerts.current(now + 23_499) != null, "Already-visible time remains part of the four-second lifetime");
+        yes(alerts.current(now + 23_500) == null, "Title expires after four actual visible seconds");
+
+        alerts.clear();
+        alerts.setVisible(false, now);
+        alerts.notice("TARANTULA_EPIC", 1, 2_000_000, now + 1_000);
+        alerts.notice("ARACHNE_FANG", 1, 100, now + 2_000);
+        alerts.setVisible(false, now + 10_000);
+        alerts.setVisible(true, now + 20_000);
+        eq("TARANTULA_EPIC", alerts.current(now + 20_200).item(), "A reward arriving in a menu starts when gameplay returns");
+        eq(2, alerts.queued(), "Hidden rewards keep their sequential queue");
+        eq("ARACHNE_FANG", alerts.current(now + 24_200).item(), "Second hidden reward gets its own four-second slot");
+        yes(alerts.current(now + 28_000) == null, "Both deferred titles expire after their visible slots");
+        alerts.setVisible(false, now + 30_000);
+        alerts.clear();
+        alerts.notice("ARACHNE_FANG", 1, 100, now + 31_000);
+        yes(alerts.current(now + 35_000) == null, "Context clear resets the deferred clock as well as the queue");
         System.out.println("PASS: " + checks + " rare-drop title and pet-label checks.");
     }
     private RngAlertsChecks() {}

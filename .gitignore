@@ -1,0 +1,23 @@
+# Gradle and generated distributions
+.gradle/
+build/
+out/
+*.class
+
+# Local Minecraft worlds, settings, logs and accounts
+run/
+logs/
+config/
+crash-reports/
+
+# Editor and machine-specific configuration
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Local credentials and overrides
+.env
+.env.*
+local.properties

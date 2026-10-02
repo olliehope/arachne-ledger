@@ -18,12 +18,18 @@ public final class FightEditScreen extends Screen {
     private String note="Set the total quantity; 0 removes this item.";
     public FightEditScreen(Screen parent,long fightId){super(Component.literal("Correct fight drops"));this.parent=parent;this.fightId=fightId;}
     @Override protected void init(){
+        String input=count==null?null:count.getValue();
         w=Math.min(440,width-24);x=(width-w)/2;y=Math.max(8,(height-218)/2);
         addRenderableWidget(new FlatButton(x+12,y+43,24,20,"<",false,()->change(-1)));
         addRenderableWidget(new FlatButton(x+w-36,y+43,24,20,">",false,()->change(1)));
-        count=new EditBox(font,x+w-144,y+80,132,20,Component.literal("Total quantity"));count.setMaxLength(12);addRenderableWidget(count);refreshCount();
+        count=new EditBox(font,x+w-144,y+80,132,20,Component.literal("Total quantity"));count.setMaxLength(12);addRenderableWidget(count);
+        if(input==null)refreshCount();else count.setValue(input);
         addRenderableWidget(new FlatButton(x+12,y+182,90,20,"Save",true,()->{
-            try{long quantity=Long.parseLong(count.getValue().trim().replace(",",""));t.editFightLoot(fightId,ids.get(index),quantity);note="Saved; fight, totals and graph updated.";}
+            if(!"".equals(t.error)){note="Storage error; correction was not saved. See Minecraft log.";return;}
+            try{
+                long quantity=Long.parseLong(count.getValue().trim().replace(",",""));t.editFightLoot(fightId,ids.get(index),quantity);
+                note="".equals(t.error)?"Saved; fight, totals and graph updated.":"Storage error; correction was not saved. See Minecraft log.";
+            }
             catch(RuntimeException ex){note=ex instanceof NumberFormatException?"Enter a whole number from 0 to 1 billion.":ex.getMessage();}
         }));
         addRenderableWidget(new FlatButton(x+w-102,y+182,90,20,"Back",false,this::onClose));

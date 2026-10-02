@@ -19,6 +19,7 @@ public final class LootDeduplicatorChecks {
     public static void main(String[] args) throws Exception {
         standFirst();
         pickupFirst();
+        splitQuantities();
         matchingAndExpiry();
         contextResets();
         trackerIntegration();
@@ -61,8 +62,8 @@ public final class LootDeduplicatorChecks {
         LootDeduplicator dedup = new LootDeduplicator();
         dedup.acceptStand(id(1), "STRING", 10, 1000);
         yes(dedup.acceptPickup("SPIDER_EYE", 10, 1100, true), "Different item does not pair despite equal quantity");
-        yes(dedup.acceptPickup("STRING", 5, 1200, true), "Partial quantity is a separate receipt");
-        yes(!dedup.acceptPickup("STRING", 10, 1300, true), "Unrelated receipts do not consume a matching stand");
+        yes(!dedup.acceptPickup("STRING", 5, 1200, true), "Partial pickup consumes only half of the matching stand");
+        yes(dedup.acceptPickup("STRING", 10, 1300, true), "A larger pickup records only its five previously unseen units");
         yes(!dedup.acceptStand(id(2), "SPIDER_EYE", 10, 1400), "Matching search can consume a different pending item");
         yes(!dedup.acceptStand(id(3), "STRING", 5, 1500), "Matching search preserves other pending quantities");
 
@@ -75,6 +76,42 @@ public final class LootDeduplicatorChecks {
         dedup.reset(); dedup.acceptPickup("STRING", 10, 2000, true);
         yes(dedup.acceptStand(id(7), "STRING", 10, 12_001), "Pickup-first pair expires after ten seconds");
         yes(!dedup.acceptStand(id(7), "STRING", 10, 30_000), "UUID identity outlives the short pairing timeout");
+    }
+
+    private static void splitQuantities() {
+        var dedup = new LootDeduplicator();
+        eq(10,dedup.acceptStandCount(id(10),"STRING",10,1000),"Stand-first records its whole stack");
+        eq(0,dedup.acceptPickupCount("STRING",5,1100,true),"First half-pickup is already recorded");
+        eq(0,dedup.acceptPickupCount("STRING",5,1200,true),"Second half-pickup is already recorded");
+        eq(5,dedup.acceptPickupCount("STRING",5,1300,true),"A third pickup remains a new receipt");
+        eq(0,dedup.acceptStandCount(id(11),"STRING",5,1400),"Third pickup pairs with its own later stand");
+
+        dedup.reset();
+        eq(5,dedup.acceptPickupCount("STRING",5,2000,true),"Pickup-first records the first five units");
+        eq(5,dedup.acceptStandCount(id(12),"STRING",10,2100),"Later stand records only five missing units");
+        eq(0,dedup.acceptPickupCount("STRING",5,2200,true),"Final half-pickup pairs with the stand remainder");
+        eq(0,dedup.acceptStandCount(id(12),"STRING",10,2300),"Partially matched stand retains its UUID identity");
+
+        dedup.reset();
+        eq(5,dedup.acceptPickupCount("STRING",5,3000,true),"First split packet counts before the label");
+        eq(5,dedup.acceptPickupCount("STRING",5,3100,true),"Second split packet counts before the label");
+        eq(0,dedup.acceptStandCount(id(13),"STRING",10,3200),"One label reconciles multiple earlier packets");
+        eq(10,dedup.acceptStandCount(id(14),"STRING",10,3300),"Distinct same-source reward still counts");
+        eq(0,dedup.acceptPickupCount("STRING",10,3400,true),"Distinct reward has its own counterpart balance");
+
+        dedup.reset();
+        eq(2,dedup.acceptStandCount(id(15),"TARANTULA_LEGENDARY",2,4000),"Pet label can describe two units");
+        eq(0,dedup.acceptPickupCount("TARANTULA_LEGENDARY",1,4100,true),"Pet split pickup shares source coverage");
+        eq(0,dedup.acceptPickupCount("TARANTULA_LEGENDARY",1,4200,true),"Second pet split pickup stays suppressed");
+        yes(!dedup.acceptClaim("TARANTULA_LEGENDARY",1,4300),"Late personal claim cannot recount the split pair");
+        dedup.beginRewardWindow();
+        yes(dedup.acceptClaim("TARANTULA_LEGENDARY",1,5000),"Next boss has fresh pet-source coverage");
+        dedup.reset();
+        eq(0,dedup.acceptStandCount(id(16),"STRING",0,6000),"Invalid zero label cannot create a counterpart signal");
+        yes(!dedup.hasSeenStand(id(16)),"Invalid quantity cannot poison a stand identity");
+        eq(10,dedup.acceptStandCount(id(16),"STRING",10,6100),"Corrected valid label can still be accepted");
+        eq(0,dedup.acceptPickupCount("STRING",Long.MAX_VALUE,6200,true),"Invalid oversized pickup cannot overflow balances");
+        eq(0,dedup.acceptPickupCount("STRING",10,6300,true),"Invalid pickup leaves a valid counterpart balance intact");
     }
 
     private static void contextResets() {

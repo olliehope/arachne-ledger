@@ -13,13 +13,19 @@ public final class FightDetailsScreen extends Screen {
     private final Tracker t=ArachneLedger.tracker;
     private final long id;
     private int x,y,w,h,scroll;
+    private FlatButton edit;
     public FightDetailsScreen(Screen parent,long id){super(Component.literal("Fight breakdown"));this.parent=parent;this.id=id;}
     @Override protected void init(){
         w=Math.min(470,width-24);h=Math.min(328,height-20);x=(width-w)/2;y=(height-h)/2;
-        var edit=new FlatButton(x+12,y+h-24,96,18,"Edit drops",false,()->minecraft.setScreen(new FightEditScreen(this,id)));
-        var fight=t.ledger.fight(id);edit.active=fight.outcome!=FightRecord.Outcome.FIGHTING && fight.outcome!=FightRecord.Outcome.WAITING_DAMAGE;addRenderableWidget(edit);
+        edit=new FlatButton(x+12,y+h-24,96,18,"Edit drops",false,()->minecraft.setScreen(new FightEditScreen(this,id)));
+        updateEditButton();addRenderableWidget(edit);
         addRenderableWidget(new FlatButton(x+w-80,y+h-24,68,18,"Back",false,this::onClose));
     }
+    private void updateEditButton(){
+        var outcome=t.ledger.fight(id).outcome;
+        edit.active=outcome!=FightRecord.Outcome.FIGHTING && outcome!=FightRecord.Outcome.WAITING_DAMAGE;
+    }
+    @Override public void tick(){updateEditButton();}
     static String duration(FightRecord fight){return fight.duration()<0?"Time unknown":String.format(Locale.ROOT,"%.1fs",fight.duration()/1000.0);}
     static String date(FightRecord fight){long at=fight.died>0?fight.died:fight.spawned;return at>0?DateTimeFormatter.ofPattern("MMM d, HH:mm").withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(at)):"Start time unknown";}
     @Override public void extractBackground(GuiGraphicsExtractor g,int mx,int my,float delta){g.fill(0,0,width,height,0x80000000);}

@@ -78,7 +78,29 @@ public final class HistoryChecks {
         contextAndIsolation();
         unfinishedAndRecentLimit();
         automaticRngOnly();
+        ongoingFightClock();
         System.out.println("PASS: " + checks + " persistent fight history, correction and attribution checks.");
+    }
+
+    private static void ongoingFightClock() throws Exception {
+        Tracker tracker = tracker();
+        spawn(tracker, 1000);
+        FightRecord fight = latest(tracker);
+        tracker.tick(BASE + 2000, true);
+        eq(1000, tracker.ledger.fightStats(fight.id).elapsed(), "Ongoing fight breakdown follows the active clock");
+        tracker.tick(BASE + 3000, true);
+        eq(2000, tracker.ledger.fightStats(fight.id).elapsed(), "Ongoing fight elapsed is recalculated without a journal mutation");
+        down(tracker, 4000, 10_000);
+        long completedElapsed = tracker.ledger.fightStats(fight.id).elapsed();
+        eq(3000, completedElapsed, "Completed fight freezes at its death active time");
+        tracker.tick(BASE + 5000, true);
+        eq(completedElapsed, tracker.ledger.fightStats(fight.id).elapsed(), "Post-death active grace does not lengthen a completed fight");
+        spawn(tracker, 6000);
+        FightRecord interrupted = latest(tracker);
+        tracker.tick(BASE + 7000, true);
+        tracker.resetContext();
+        eq(1000, tracker.ledger.fightStats(interrupted.id).elapsed(), "Interrupted fight retains its final active duration");
+        tracker.ledger.validate();
     }
 
     private static void migrationAndPersistence() throws Exception {

@@ -59,8 +59,8 @@ Before a public stable release, test a normal farming session in Hypixel: Sanctu
 After committing the release changes and pushing `master`, create and push the matching tag. For this version:
 
 ```powershell
-git tag -a v1.0.0 -m "Arachne Ledger 1.0.0"
-git push origin v1.0.0
+git tag -a v1.0.1 -m "Arachne Ledger 1.0.1"
+git push origin v1.0.1
 ```
 
 The **Prepare GitHub release** workflow rebuilds and checks the tagged commit. The tag must equal `v` plus the exact version in `gradle.properties`; `v1.0.1` or `v1.0.0-beta` against a `1.0.0` build fails before any release is created.
@@ -77,8 +77,8 @@ For a version, use these settings:
 
 | Setting | Value for this build |
 | --- | --- |
-| Primary file | `arachne-ledger-1.0.0.jar` |
-| Version number | `1.0.0` |
+| Primary file | `arachne-ledger-1.0.1.jar` |
+| Version number | `1.0.1` |
 | Release channel | Beta until live acceptance testing is complete |
 | Loader | Fabric |
 | Game version | Minecraft Java `26.1.2` |
@@ -89,10 +89,10 @@ For a version, use these settings:
 
 Use the same JAR as the GitHub release. Keep the full source ZIP on GitHub and link the repository; it is not the installable mod. Modrinth supports a dedicated sources JAR as an optional additional file. [Version metadata](https://docs.modrinth.com/api/operations/createversion/), [additional files](https://support.modrinth.com/en/articles/8793363-additional-files)
 
-Use actual screenshots of the mod and clearly label any fixture/sample values. A project icon and final public screenshots have not been created for this release preparation. Complete the site's disclosure and review process; review time is variable. [Review information](https://support.modrinth.com/en/articles/8793355-project-review-times)
+Use actual screenshots of the mod and clearly label any fixture/sample values. The supplied project icon is packaged with the mod; final public screenshots still need real farming data. Complete the site's disclosure and review process; review time is variable. [Review information](https://support.modrinth.com/en/articles/8793355-project-review-times)
 
 The first upload is manual. After a project exists and its visibility is resolved, an optional Modrinth publishing job can use a scoped publishing token stored in GitHub Actions secrets. That future job should publish only tagged builds, declare Fabric API as required, refuse duplicate versions, and never expose a token to pull requests. No Modrinth token or project ID is needed for the current GitHub workflow.
 
 ## Release status
 
-Version 1.0.0's automated checks and client-verification status are recorded in the README. The project is now live on GitHub with v1.0.0 released. Existing entries retain their recorded values and saved manual overrides; Bazaar mode changes affect future values unless the session is explicitly repriced, and graph preferences change display only. The GitHub repository is now active and accepting contributions.
+Version 1.0.1's automated checks and client-verification status are recorded in the README. The project is now live on GitHub with v1.0.0 released. Existing entries retain their recorded values and saved manual overrides; Bazaar mode changes affect future values unless the session is explicitly repriced, and graph preferences change display only. The GitHub repository is now active and accepting contributions.

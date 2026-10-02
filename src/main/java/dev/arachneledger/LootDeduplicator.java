@@ -2,9 +2,9 @@ package dev.arachneledger;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.ArrayList;
-import java.util.EnumSet;
-import java.util.List;
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
@@ -18,13 +18,17 @@ import java.util.UUID;
  */
 public final class LootDeduplicator {
     public static final long MATCH_WINDOW_MILLIS = 10_000;
-    private record Signal(String item, long count, long at) {}
+    private static final class Signal {
+        final String item;
+        final long at;
+        long remaining;
+        Signal(String item, long count, long at) { this.item = item; this.remaining = count; this.at = at; }
+    }
     private final Deque<Signal> stands = new ArrayDeque<>();
     private final Deque<Signal> pickups = new ArrayDeque<>();
     private final Set<UUID> seenStands = new HashSet<>();
     private enum PetSource { STAND, PICKUP, CLAIM }
-    private record PetReceipt(String item, long count, EnumSet<PetSource> sources) {}
-    private final List<PetReceipt> pets = new ArrayList<>();
+    private final Map<String, EnumMap<PetSource, Long>> pets = new HashMap<>();
     private final Set<String> petClaims = new HashSet<>();
 
     /** Lets the entity scanner skip reparsing labels already accepted in this world context. */
@@ -35,12 +39,18 @@ public final class LootDeduplicator {
      * its next metadata update or client scan cannot turn the suppressed copy into loot.
      */
     public boolean acceptStand(UUID uuid, String item, long count, long now) {
-        if (!seenStands.add(uuid)) return false;
+        return acceptStandCount(uuid, item, count, now) > 0;
+    }
+
+    /** Returns only units not already recorded through a physical pickup. */
+    public long acceptStandCount(UUID uuid, String item, long count, long now) {
+        if (uuid == null || item == null || count < 1 || count > 1_000_000_000L) return 0;
+        if (!seenStands.add(uuid)) return 0;
         if (PetDrops.isTarantula(item)) return acceptPet(item, count, PetSource.STAND);
         prune(now);
-        if (consume(pickups, item, count)) return false;
-        stands.addLast(new Signal(item, count, now));
-        return true;
+        long unseen = consume(pickups, item, count);
+        if (unseen > 0) stands.addLast(new Signal(item, unseen, now));
+        return unseen;
     }
 
     /**
@@ -48,30 +58,34 @@ public final class LootDeduplicator {
      * reward stands are eligible; ordinary mid-fight pickups cannot suppress later loot.
      */
     public boolean acceptPickup(String item, long count, long now, boolean rememberForStands) {
+        return acceptPickupCount(item, count, now, rememberForStands) > 0;
+    }
+
+    /** Inventory space can split a single labelled stack across multiple pickup packets. */
+    public long acceptPickupCount(String item, long count, long now, boolean rememberForStands) {
+        if (item == null || count < 1 || count > 1_000_000_000L) return 0;
         if (rememberForStands && PetDrops.isTarantula(item)) return acceptPet(item, count, PetSource.PICKUP);
         prune(now);
-        if (consume(stands, item, count)) return false;
-        if (rememberForStands) pickups.addLast(new Signal(item, count, now));
-        return true;
+        long unseen = consume(stands, item, count);
+        if (rememberForStands && unseen > 0) pickups.addLast(new Signal(item, unseen, now));
+        return unseen;
     }
 
     /** Claims may be relayed twice; keep their identity for the whole boss reward window. */
     public boolean acceptClaim(String item, int count, long now) {
-        if (!PetDrops.isTarantula(item) || count < 1 || !petClaims.add(item + ":" + count)) return false;
-        return acceptPet(item, count, PetSource.CLAIM);
+        if (!PetDrops.isTarantula(item) || count < 1 || count > 1_000_000_000 || !petClaims.add(item + ":" + count)) return false;
+        return acceptPet(item, count, PetSource.CLAIM) > 0;
     }
 
-    private boolean acceptPet(String item, long count, PetSource source) {
-        // Remember all three sources instead of consuming a pair: a late personal
-        // claim must not recount a pet already seen as both a stand and a pickup.
-        for (PetReceipt pet : pets) {
-            if (pet.item().equals(item) && pet.count() == count && !pet.sources().contains(source)) {
-                pet.sources().add(source);
-                return false;
-            }
-        }
-        pets.add(new PetReceipt(item, count, EnumSet.of(source)));
-        return true;
+    private long acceptPet(String item, long count, PetSource source) {
+        // Three sources describe the same rewards. Keep cumulative coverage per source
+        // for the entire window so a late claim cannot recount a matched stand/pickup,
+        // even when the server split the pickup into smaller quantities.
+        var sources = pets.computeIfAbsent(item, ignored -> new EnumMap<>(PetSource.class));
+        long recorded = sources.values().stream().mapToLong(Long::longValue).max().orElse(0);
+        long observed = sources.getOrDefault(source, 0L) + count;
+        sources.put(source, observed);
+        return Math.max(0, observed - recorded);
     }
 
     /**
@@ -91,21 +105,23 @@ public final class LootDeduplicator {
         seenStands.clear();
     }
 
-    private static boolean consume(Deque<Signal> signals, String item, long count) {
+    private static long consume(Deque<Signal> signals, String item, long count) {
         for (Iterator<Signal> iterator = signals.iterator(); iterator.hasNext();) {
             Signal signal = iterator.next();
-            // Exact quantity matching is intentional: partial and unrelated receipts are separate rewards.
-            if (signal.item().equals(item) && signal.count() == count) {
-                iterator.remove();
-                return true;
+            if (signal.item.equals(item)) {
+                long matched = Math.min(signal.remaining, count);
+                count -= matched;
+                signal.remaining -= matched;
+                if (signal.remaining == 0) iterator.remove();
+                if (count == 0) break;
             }
         }
-        return false;
+        return count;
     }
 
     private void prune(long now) {
         // A pair exactly ten seconds old still matches; older signals cannot suppress new rewards.
-        while (!stands.isEmpty() && now - stands.peekFirst().at() > MATCH_WINDOW_MILLIS) stands.removeFirst();
-        while (!pickups.isEmpty() && now - pickups.peekFirst().at() > MATCH_WINDOW_MILLIS) pickups.removeFirst();
+        while (!stands.isEmpty() && now - stands.peekFirst().at > MATCH_WINDOW_MILLIS) stands.removeFirst();
+        while (!pickups.isEmpty() && now - pickups.peekFirst().at > MATCH_WINDOW_MILLIS) pickups.removeFirst();
     }
 }

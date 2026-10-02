@@ -1,4 +1,4 @@
-# Arachne Ledger 1.0.0
+# Arachne Ledger 1.0.1
 
 Client-side Hypixel SkyBlock Arachne profit tracker for **Minecraft Java 26.1.2 / Fabric**.
 
@@ -9,14 +9,14 @@ Arachne Ledger tracks Arachne fights, loot, costs, and profit with live HUD disp
 ## Install
 
 1. Install Minecraft Java 26.1.2 and Fabric Loader 0.19.5 or newer for that version.
-2. Put Fabric API 0.155.3+26.1.2 and `arachne-ledger-1.0.0.jar` in your Minecraft `mods` folder. When updating, close Minecraft and remove the old Arachne Ledger JAR first. Your existing prices and saved history are preserved.
+2. Put Fabric API 0.155.3+26.1.2 and `arachne-ledger-1.0.1.jar` in your Minecraft `mods` folder. When updating, close Minecraft and remove the old Arachne Ledger JAR first. Your existing prices and saved history are preserved.
 3. Start the game and join Hypixel SkyBlock. Press **O** or type `/arachne` to open the dashboard.
 
 The mod requires Java 25, as Minecraft 26.1.2 does. The HUD appears while you are in Arachne's Sanctuary. Keybindings are configurable in Minecraft Controls.
 
 ## What it tracks
 
-- Arachne rewards shown as armor stand labels around the defeated boss, such as `Spider Essence x8`, `Spider Eye x30`, and Arachne Shard. The quantity on each label is recorded once per armor stand. Physical item pickups are still supported, with a short matching window to avoid duplicate counts. Tarantula pets also support explicit names such as `Legendary Tarantula Pet` and your personal pet-claim message during the 45-second reward window.
+- Arachne rewards shown as armor stand labels around the defeated boss, such as `Spider Essence x8`, `Spider Eye x30`, and Arachne Shard. The quantity on each label is recorded once per armor stand. Physical pickups reconcile item quantities across split/stacked packets within a ten-second window, recording only newly observed units. Tarantula pets also support explicit names such as `Legendary Tarantula Pet` and your personal pet-claim message during the 45-second reward window.
 - Arachne Crystals and Arachne's Callings **you** place, identified from both your player name and Hypixel's `You placed...` messages.
 - Boss kills where the server reports at least **10,000 damage**, with an adjustable minimum. Zero and lower-damage participation do not count as kills or print success summaries.
 - Marked purse gains during fights or shortly after death, shown as Scavenger coins and included in profit.
@@ -89,7 +89,7 @@ Open **Fights** in the dashboard for the latest 50 fights in the selected sessio
 
 **Edit drops** sets an item's absolute quantity for that fight. Set 0 to remove it, or select a previously missing item and enter its count. The correction updates the same journal used by fight profit, totals and graphs. Editing an older session does not add its rewards to the current session. Existing items keep their recorded unit value; mixed-price entries use their weighted average. A newly added item uses its current effective price. Corrections and repricing do not show rare-drop titles.
 
-Fight metadata starts with version 1.5.0. Earlier totals remain intact, but cannot be reconstructed into reliable fight breakdowns because their spawn times and damage were not saved. Tracking stopped during a fight is shown as interrupted when reopening the game.
+Fight metadata is included in all public GitHub releases (introduced in internal development build 1.5.0). Earlier totals remain intact, but cannot be reconstructed into reliable fight breakdowns because their spawn times and damage were not saved. Tracking stopped during a fight is shown as interrupted when reopening the game.
 
 ## Automatic Bazaar prices
 
@@ -107,7 +107,7 @@ A detected **Arachne's Fang**, **Epic Tarantula**, or **Legendary Tarantula** sh
 
 Personal `You claimed a Tarantula Pet! You can manage your Pets...` receipts are also detected during the 45 seconds after Arachne's death. Their original rarity colour or an explicit Epic/Legendary name is required. Matching pet labels, pickups, and claims are recorded once across that reward window, in any arrival order. Repeated claim messages cannot add another copy. Claims outside a boss reward window, other players' messages, and unknown rarities are ignored.
 
-Use `/arachne rng on|off` to control titles and `/arachne rng value` to show or hide their values. `/arachne rng test` previews a Legendary title; append `epic`, `legendary`, or `fang` to select one. Previews use your configured price and never add loot or change profit. Titles require the GUI to be visible; they appear in ordinary gameplay and chat, and last four seconds. Opening an inventory or dashboard hides the title without pausing its lifetime.
+Use `/arachne rng on|off` to control titles and `/arachne rng value` to show or hide their values. `/arachne rng test` previews a Legendary title; append `epic`, `legendary`, or `fang` to select one. Previews use your configured price and never add loot or change profit, including while tracking is paused. Titles appear in ordinary gameplay and chat for four visible seconds. Menus and F1 pause their lifetime, so a hidden title can display when you return to gameplay. Leaving the tracking context still clears old reward notices.
 
 ## Controls
 
@@ -126,9 +126,9 @@ Commands: `/arachne bazaar [on|off|defaults|refresh]`, `/arachne rng [on|off|val
 
 If you play multiple SkyBlock profiles on the same Minecraft account, use `/arachne profile <name>` when you switch; the mod cannot identify your active SkyBlock profile from the server. Saves live in `config/arachneledger` and are written periodically and on disconnect. CSV exports are saved under `config/arachneledger/exports`.
 
-## Location detection in 1.1.1
+## Location detection
 
-Sanctuary detection reads the visible sidebar and tab location, handles Unicode apostrophes and symbols inserted inside words, and recognizes Hypixel's server brand for alternate addresses. Version 1.1.1 fixes Hypixel's custom `§v` style codes inside sidebar words; the sidebar's Sanctuary sub-area now takes priority over the tab's broader Spider's Den island. This was checked with the captured scoreboard line that previously failed. Recent server boss or summoning messages provide a temporary fallback when SkyBlock is confirmed but the sub-area is unavailable. An explicit different area or world change clears this fallback. Modern player-head decorations and all four Calling placements are supported; only your own placements are charged and kills require the configured minimum reported damage.
+Sanctuary detection reads the visible sidebar and tab location, handles Unicode apostrophes and symbols inserted inside words, and recognizes Hypixel's server brand for alternate addresses. Hypixel's custom `§v` style codes inside sidebar words are handled; the sidebar's Sanctuary sub-area takes priority over the tab's broader Spider's Den island. This was checked with the captured scoreboard line that previously failed. Recent server boss or summoning messages provide a temporary fallback when SkyBlock is confirmed but the sub-area is unavailable. An explicit different area or world change clears this fallback. Modern player-head decorations and all four Calling placements are supported; only your own placements are charged and kills require the configured minimum reported damage.
 
 If tracking still waits in the Sanctuary, run `/arachne debug`. It displays the detection state and saves visible sidebar/tab text to `config/arachneledger/detection-debug.txt`. This local file may contain visible player names. `/arachne track manual` enables tracking anywhere in confirmed Hypixel SkyBlock when another mod hides location data; use it only while farming, then `/arachne track auto` to restore location detection. Manual mode still requires boss/summoning messages to open loot collection windows.
 
@@ -136,11 +136,13 @@ The armor stand scan covers the visible Arachne rewards for 45 seconds after the
 
 ## Build and verify
 
-In this directory, run `gradlew.bat build` on Windows or `./gradlew build` on macOS/Linux using JDK 25. The build produces `build/libs/arachne-ledger-1.8.jar`. **1,342 checks across 18 regression suites passed**, covering accounting, graph series/labels/projections/spawn markers, price-mode selection and caches, location and reward detection, spawn/summoning/AFK timing, purse pairing, NPC/salvage valuations, damage qualification, chat summaries, persistent history/corrections, isolation, migration, Bazaar failure fallback, pet rarity labels, and rare-drop title deduplication.
+In this directory, run `gradlew.bat build` on Windows or `./gradlew build` on macOS/Linux using JDK 25. The build produces `build/libs/arachne-ledger-1.0.1.jar`. **1,436 checks across 19 regression suites passed**, covering accounting, graph series/labels/projections/spawn markers, price-mode selection and caches, location and reward detection, spawn/summoning/AFK timing, purse pairing, NPC/salvage valuations, damage qualification, chat summaries, persistent history/corrections, isolation, migration, Bazaar failure fallback, pet rarity labels, and rare-drop title deduplication.
 
 Run `gradlew.bat clean prepareRelease` to create the installable JAR, complete source ZIP, changelog notes and SHA-256 checksums in `build/release`. On Linux/macOS, use `bash ./gradlew clean prepareRelease`. The included GitHub workflows build pull requests and prepare a draft prerelease when you push a matching `v<version>` tag. Read [Publishing and releases](docs/RELEASING.md) before your first upload.
 
-A previous 1.6.0 local Minecraft client check rendered the dashboard, Scavenger subtotals, fight breakdown, HUD and gear settings at two GUI scales. It exercised a fight quantity correction, navigation to/from Salvage, both valuation toggles and the Scavenger setting, and checked the Summoning HUD after AFK. The 1.8 local client check rendered 20 screens at two GUI scales and exercised graph line/text toggles, metric selection, scrolling, spawn markers, projection layouts, dashboard/HUD navigation, scope switching, Bazaar modes, manual overrides and invalid input. Display and price changes preserved recorded history and active time. The Java Bazaar service also successfully fetched and installed both price caches from the public endpoint without an API key. No live Hypixel server was joined.
+The 1.0.1 local Minecraft client check passed **52 synthetic UI interaction checks**, with 11 screenshots inspected at GUI scales 2 and 4. It verified retained price/quantity drafts on resize and navigation, fixed/recipe switching, corrections, visible fight-row clicks, edit availability after damage results, graph rendering, and real filesystem failure feedback. Failed saves stay visible and do not print success; blocked mutations cannot be repeated, while diagnostics remain available. No live Hypixel server was joined.
+
+Previous internal 1.6.0 and 1.8 client checks covered the HUD, Scavenger subtotals, salvage settings, graph line/text options, scrolling, projections, scope switching, and Bazaar modes. Display and price changes preserved recorded history and active time. The Java Bazaar service also successfully fetched and installed both price caches from the public endpoint without an API key.
 
 Source references: [Fabric 26.1 migration notice](https://www.fabricmc.net/2026/03/14/261.html), [Arachne Crystal recipe](https://hypixelskyblock.minecraft.wiki/w/Arachne_Crystal), [Hypixel public API documentation](https://api.hypixel.net/index.html), [Hypixel Salvaging](https://wiki.hypixel.net/Salvaging), [Arachne's Armor NPC values](https://hypixel-skyblock.fandom.com/wiki/Arachne%27s_Armor), [Arack NPC value](https://hypixel-skyblock.fandom.com/wiki/Arack), [SkyHanni's Arachne message examples](https://github.com/hannibal002/SkyHanni/blob/beta/src/main/java/at/hannibal2/skyhanni/features/chat/ArachneChatMessageHider.kt), [SkyHanni's armor stand loot scan](https://github.com/hannibal002/SkyHanni/blob/beta/src/main/java/at/hannibal2/skyhanni/features/combat/end/ProfitPerDragon.kt), and [SkyHanni's tracker layout](https://github.com/hannibal002/SkyHanni/blob/beta/src/main/java/at/hannibal2/skyhanni/utils/tracker/SkyHanniItemTracker.kt). These are references; this mod has no runtime dependency on SkyHanni.
 

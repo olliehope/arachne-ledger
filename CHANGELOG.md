@@ -1,8 +1,26 @@
 # Changelog
 
-Versions describe changes to the mod source and local builds. They do not imply a public GitHub or Modrinth release. No release dates are assigned here.
+Public GitHub releases start at 1.0.0. Earlier development builds used separate numbering and are retained below for reference.
 
-## [1.8]
+## [1.0.1]
+
+- Reconciled reward quantities across labels and split/stacked pickup packets, preventing partial pickups from counting loot twice. Kept pet claim deduplication across all three reward sources.
+- Observed container menus every client tick and before packet processing, so brief NPC visits and delayed sales cannot bypass the Scavenger cooldown.
+- Preserved typed prices, adjustment amounts, and fight quantities through resize/navigation. Recipe mode keeps the separate fixed Crystal draft. Fixed clicks on hidden fight rows and refreshed edit availability after damage results arrive.
+- Allowed valid composite recipe/salvage valuations to record, reprice, correct, and reload, while retaining the manual price limit. Ongoing fight statistics now show their active elapsed time.
+- Fixed persistence for relative filenames and reserved unique corrupt-file quarantine paths during backup recovery.
+- Kept settings and correction screens open on failed saves, retained their drafts, and blocked repeated mutations. Commands now report success only after persistence remains healthy; diagnostics stay available after storage errors.
+- Paused rare-title lifetimes while the overlay is hidden by menus or F1, and kept title previews available while tracking is paused. Previews never add rewards.
+- Fixed CI branch selection so pushes to the repository's `master` branch run Windows and Linux checks.
+- Removed Gradle caches, generated Minecraft binaries and editor configuration from Git tracking, added repository ignore rules, and made the Gradle wrapper executable on Unix.
+- Corrected release numbering and added the project icon and source/issue links to the packaged mod metadata.
+- Verified 1,436 checks across 19 regression suites and 52 synthetic Minecraft UI checks at two GUI scales. Live Hypixel acceptance remains pending.
+
+## [1.0.0]
+
+- Initial GitHub release, carrying forward the complete 1.8 development feature set: fight and loot tracking, session/lifetime totals, costs, Scavenger income, valuation settings, graphs, projections, rare-drop titles, and saved history.
+
+## [1.8] (internal development build)
 
 - Fixed missing Tarantula pet rewards and titles for explicit `Epic Tarantula Pet` / `Legendary Tarantula Pet` floating names. Preserved Component colours in chat and added personal pet-claim detection during the boss reward window.
 - Deduplicated matching pet labels, pickups, and claims in any order throughout the reward window, including repeated claim messages.

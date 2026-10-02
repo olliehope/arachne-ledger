@@ -85,7 +85,57 @@ public final class ValuationChecks {
         eq(6_000, ledger.stats(false).revenue(), "Explicit session reprice uses the chosen basis");
         eq(22_000, ledger.stats(true).revenue(), "Reprice preserves older sessions");
         trackerIntegration(root.resolve("tracker"));
+        compositePriceBounds(root.resolve("composite"));
         System.out.println("PASS: " + checks + " gear valuation, migration, market and history checks.");
+    }
+
+    private static void compositePriceBounds(Path root) throws Exception {
+        Config config = new Config();
+        config.manualSet("ESSENCE_SPIDER", Config.MAX_MANUAL_PRICE);
+        config.salvageArmor = true;
+        config.salvageWeapons = true;
+        config.manualSet("ARACHNE_FRAGMENT", Config.MAX_MANUAL_PRICE);
+        config.manualSet("ENCHANTED_STRING", Config.MAX_MANUAL_PRICE);
+        config.manualSet("ENCHANTED_SPIDER_EYE", Config.MAX_MANUAL_PRICE);
+        config.validate();
+        eq(5 * Config.MAX_MANUAL_PRICE, config.lootPrice("ARACK"), "Valid essence input may yield a larger salvage unit value");
+        eq(34 * Config.MAX_MANUAL_PRICE, config.effectiveCrystalCost(), "Recipe sums all valid ingredient inputs");
+
+        Tracker tracker = new Tracker(root);
+        tracker.account("composite-owner");
+        tracker.config = config;
+        long now = 1_000_000;
+        tracker.updateLocation(true, true, true, "Arachne's Sanctuary", "sidebar", now);
+        tracker.tick(now, true);
+        tracker.message("☄ You placed an Arachne Crystal!", "Player", now + 1);
+        tracker.message("[BOSS] Arachne: Ahhhh...A Calling...", "Player", now + 2);
+        tracker.message("ARACHNE DOWN!", "Player", now + 1_000);
+        tracker.message("Your Damage: 10,001 (Position #1)", "Player", now + 1_001);
+        tracker.observeLootStand(new UUID(81, 1), "Arachne's Boots", now + 1_002);
+        eq(34 * Config.MAX_MANUAL_PRICE, tracker.ledger.stats(false).costs(), "Automatic placement records the complete composite recipe cost");
+        eq(5 * Config.MAX_MANUAL_PRICE, tracker.ledger.stats(false).revenue(), "Automatic salvage reward records its complete composite value");
+
+        long fightId = tracker.ledger.recentFights(true).getFirst().id;
+        tracker.editFightLoot(fightId, "ARACK", 1);
+        tracker.reprice("ARACHNE_BOOTS", config.lootPrice("ARACHNE_BOOTS"));
+        eq(10 * Config.MAX_MANUAL_PRICE, tracker.ledger.fightStats(fightId).revenue(), "Corrections and repricing accept valid composite units");
+        tracker.ledger.validate();
+        tracker.saveConfig();
+        tracker.save();
+        Tracker reopened = new Tracker(root);
+        reopened.account("composite-owner");
+        yes(reopened.ready(), "Composite recorded prices survive settings and ledger validation");
+        eq(-24 * Config.MAX_MANUAL_PRICE, reopened.ledger.stats(true).profit(), "Persistence preserves full composite revenue and cost");
+        yes(reopened.ledger.stats(true).graph().getLast().profit() == reopened.ledger.stats(true).profit(), "Graph matches composite accounting after reload");
+
+        boolean rejected = false;
+        try { config.manualSet("STRING", Config.MAX_MANUAL_PRICE + 1); }
+        catch (IllegalArgumentException expected) { rejected = true; }
+        yes(rejected, "Individual manual-price inputs retain their original limit");
+        rejected = false;
+        try { reopened.ledger.add(Ledger.Kind.LOOT, "STRING", 1, Double.POSITIVE_INFINITY, "test", now); }
+        catch (IllegalArgumentException expected) { rejected = true; }
+        yes(rejected, "Derived-unit support never admits infinite prices");
     }
 
     private static void trackerIntegration(Path root) throws Exception {

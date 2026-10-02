@@ -21,7 +21,7 @@ processResources {
     filesMatching('fabric.mod.json') { expand metadata }
 }
 // Main-method regression suites intentionally run through `check`, without a game server.
-['Tracker', 'Analytics', 'LocationDetection', 'Integration', 'LootLabels', 'LootTracking', 'Fight', 'History', 'Bazaar', 'RngAlerts', 'LootDeduplicator', 'Spawn', 'PurseCoins', 'Valuation', 'BazaarModes', 'Graph', 'T2Spawn', 'PetReward'].each { suite ->
+['Tracker', 'Analytics', 'LocationDetection', 'Integration', 'LootLabels', 'LootTracking', 'Fight', 'History', 'Bazaar', 'RngAlerts', 'LootDeduplicator', 'Spawn', 'PurseCoins', 'Valuation', 'BazaarModes', 'Graph', 'T2Spawn', 'PetReward', 'Persistence'].each { suite ->
     def verification = tasks.register("verify${suite}", JavaExec) {
         dependsOn testClasses
         classpath = sourceSets.test.runtimeClasspath

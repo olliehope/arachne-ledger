@@ -4,7 +4,7 @@ This is a prioritized list of proposals. These features are **not implemented** 
 
 ## First: validate real farming sessions
 
-The local client and deterministic fixtures verify rendering, interaction, accounting, and known message formats. They do not replace a live Hypixel session. The 1.5.0 validation did not join Hypixel, and its live Bazaar request failed.
+The local client and deterministic fixtures verify rendering, interaction, accounting, and known message formats. They do not replace a live Hypixel session. The public Bazaar endpoint has been tested successfully; live farming acceptance remains pending.
 
 | Priority | Proposed work | Evidence needed |
 | --- | --- | --- |
@@ -18,7 +18,7 @@ Server-format fixes should come with redacted examples and a deterministic regre
 
 - **Configurable rare titles and sound:** Per-item enablement, duration, scale/position, rarity filters, and an optional local sound. Keep server titles intact, show recorded value clearly, and deduplicate before notification.
 - **Drop statistics and pace without RNG:** Per-item counts, rates, observed frequency, and a separate projection excluding explicitly classified rare drops. Keep total profit and the existing observed projection available; explain sample size and which items the alternate pace excludes.
-- **Inventory confirmation:** Distinguish a spawned reward label from a confirmed receipt, reconcile partial/stacked pickups, and make leaving a reward behind visible. Research available client signals first; inventory deltas alone can include unrelated items and must not silently double revenue.
+- **Inventory confirmation:** Distinguish a spawned reward label from a confirmed receipt and make leaving a reward behind visible. Version 1.0.1 reconciles partial/stacked pickup quantities, but does not prove ownership of every stand. Research available client signals first; inventory deltas alone can include unrelated items and must not silently double revenue.
 - **Valuation receipts:** Record valuation basis, price timestamp, and any tax assumption alongside a receipt; optionally let a user record actual proceeds. Keep estimated loot value and realized sale income distinguishable to avoid counting both.
 
 ## Then: strengthen editing and long history

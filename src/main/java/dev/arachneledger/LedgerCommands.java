@@ -5,8 +5,7 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-import java.util.Locale;
-import java.util.Objects;
+import java.util.*;
 import java.util.function.Consumer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
@@ -24,6 +23,7 @@ public final class LedgerCommands {
 
     private final Tracker tracker;
     private final Actions actions;
+    private List<String> pendingFeedback;
 
     private LedgerCommands(Tracker tracker, Actions actions) {
         this.tracker = Objects.requireNonNull(tracker);
@@ -107,7 +107,7 @@ public final class LedgerCommands {
             })));
         }
         root.then(track);
-        root.then(literal("debug").executes(c -> run(actions.diagnostics())));
+        root.then(literal("debug").executes(c -> runReadOnly(actions.diagnostics())));
         root.then(literal("mindamage")
             .then(argument("damage", LongArgumentType.longArg(1, 1_000_000_000_000L))
                 .executes(c -> run(() -> {
@@ -150,10 +150,10 @@ public final class LedgerCommands {
             tracker.saveConfig();
             say("Rare drop title values " + (tracker.config.rngValue ? "shown" : "hidden") + ".");
         })));
-        var preview = literal("test").executes(c -> run(() -> previewRareDrop("TARANTULA_LEGENDARY")));
+        var preview = literal("test").executes(c -> runReadOnly(() -> previewRareDrop("TARANTULA_LEGENDARY")));
         for (String name : new String[]{"epic", "legendary", "fang"}) {
             String item = name.equals("fang") ? "ARACHNE_FANG" : "TARANTULA_" + name.toUpperCase(Locale.ROOT);
-            preview.then(literal(name).executes(c -> run(() -> previewRareDrop(item))));
+            preview.then(literal(name).executes(c -> runReadOnly(() -> previewRareDrop(item))));
         }
         rng.then(preview);
         root.then(rng);
@@ -169,7 +169,7 @@ public final class LedgerCommands {
     }
 
     private void priceCommands(LiteralArgumentBuilder<FabricClientCommandSource> root) {
-        var bazaar = literal("bazaar").executes(c -> run(() ->
+        var bazaar = literal("bazaar").executes(c -> runReadOnly(() ->
             say(BazaarPrices.GLOBAL.status(tracker.config, System.currentTimeMillis()))));
         for (String option : new String[]{"on", "off"}) {
             bazaar.then(literal(option).executes(c -> run(() -> {
@@ -260,7 +260,7 @@ public final class LedgerCommands {
     }
 
     private void helpCommand(LiteralArgumentBuilder<FabricClientCommandSource> root) {
-        root.then(literal("help").executes(c -> run(() -> {
+        root.then(literal("help").executes(c -> runReadOnly(() -> {
             say("/arachne opens the dashboard. O is the default key.");
             say("session | total | view | pause | new | undo | export | profile <name>");
             say("hud [on|off|edit|view|always] | track auto/manual | debug");
@@ -272,9 +272,25 @@ public final class LedgerCommands {
 
     /** Expected user errors become local chat feedback instead of escaping Brigadier. */
     private int run(Runnable action) {
-        try { action.run(); return 1; }
-        catch (Exception ex) { say(ex.getMessage()); return 0; }
+        if (!"".equals(tracker.error)) { storageError(); return 0; }
+        pendingFeedback = new ArrayList<>();
+        try {
+            action.run();
+            if (!"".equals(tracker.error)) { storageError(); return 0; }
+            pendingFeedback.forEach(actions.message());
+            return 1;
+        } catch (Exception ex) { actions.message().accept(ex.getMessage()); return 0; }
+        finally { pendingFeedback = null; }
     }
 
-    private void say(String text) { actions.message().accept(text); }
+    private int runReadOnly(Runnable action) {
+        try { action.run(); return 1; }
+        catch (Exception ex) { actions.message().accept(ex.getMessage()); return 0; }
+    }
+
+    private void storageError() { actions.message().accept("Storage error; changes were not saved. See Minecraft log."); }
+    private void say(String text) {
+        // Persistence catches I/O errors inside Tracker. Publish success only after it stayed healthy.
+        if (pendingFeedback == null) actions.message().accept(text); else pendingFeedback.add(text);
+    }
 }

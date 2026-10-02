@@ -45,7 +45,7 @@ public final class Ledger {
     public Entry add(Kind kind, String item, long count, double unit, String source, long now,long fightId) {
         if (kind == null || item == null || source == null || count < 1 || count > 1_000_000_000L)
             throw new IllegalArgumentException("Invalid ledger entry");
-        Config.amount(Double.toString(unit));
+        Config.validateRecordedPrice(unit);
         Entry entry = new Entry(now, activeMillis, kind, item, count, unit, source, fightId, nextEntryId++);
         entries.add(entry);
         revision++;
@@ -87,7 +87,8 @@ public final class Ledger {
             if(e.kind==Kind.LOOT){loot.merge(e.item,e.count,Long::sum);if(e.unit==0)unpriced+=e.count;}
             graph.add(new Point(Math.max(0,e.elapsed-fight.activeStart),income-costs));
         }
-        return new Stats(income,costs,crystals,callings,kills,Math.max(0,fight.activeEnd-fight.activeStart),Map.copyOf(loot),List.copyOf(graph),unpriced);
+        long activeEnd = fight.outcome == FightRecord.Outcome.FIGHTING ? activeMillis : fight.activeEnd;
+        return new Stats(income,costs,crystals,callings,kills,Math.max(0,activeEnd-fight.activeStart),Map.copyOf(loot),List.copyOf(graph),unpriced);
     }
     public Map<String,Double> fightLootValues(long id) {
         Map<String,Double> values=new LinkedHashMap<>();
@@ -106,7 +107,7 @@ public final class Ledger {
     /** Replace a fight's quantity in place so old-session corrections cannot leak into this session. */
     public void setFightLootCount(long fightId,String item,long count,double fallbackUnit,long now) {
         if(!Catalog.ITEMS.containsKey(item) || count<0 || count>1_000_000_000L)throw new IllegalArgumentException("Use a known item and quantity from 0 to 1 billion.");
-        Config.amount(Double.toString(fallbackUnit));FightRecord fight=fight(fightId);
+        Config.validateRecordedPrice(fallbackUnit);FightRecord fight=fight(fightId);
         if(fight.outcome==FightRecord.Outcome.FIGHTING || fight.outcome==FightRecord.Outcome.WAITING_DAMAGE)
             throw new IllegalArgumentException("Wait for the fight's damage summary before editing.");
         int insertion=-1;long existingCount=0;double existingValue=0;long elapsed=fight.activeEnd;
@@ -142,6 +143,7 @@ public final class Ledger {
             if(fight.outcome==FightRecord.Outcome.FIGHTING){fight.outcome=FightRecord.Outcome.INTERRUPTED;changed=true;}
             else if(fight.outcome==FightRecord.Outcome.WAITING_DAMAGE){fight.outcome=FightRecord.Outcome.MISSING_DAMAGE;changed=true;}
         }
+        if (changed) revision++;
         return changed;
     }
     public boolean undo() {
@@ -149,7 +151,7 @@ public final class Ledger {
         entries.removeLast(); revision++; return true;
     }
     public void reprice(String id, double unit) {
-        Config.amount(Double.toString(unit));
+        Config.validateRecordedPrice(unit);
         for (int i = sessionStart; i < entries.size(); i++) {
             Entry e = entries.get(i);
             if (e.item.equals(id)) entries.set(i, new Entry(e.at, e.elapsed, e.kind, e.item, e.count, unit, e.source,e.fightId,e.id));
@@ -216,7 +218,7 @@ public final class Ledger {
                     || e.elapsed < last || e.elapsed > activeMillis || e.fightId<0 || (e.fightId>0 && !fightIds.contains(e.fightId))) throw new IllegalArgumentException("Invalid ledger entry");
             if(e.id==0){e=new Entry(e.at,e.elapsed,e.kind,e.item,e.count,e.unit,e.source,e.fightId,nextEntryId++);entries.set(i,e);}
             if(e.id<1 || !entryIds.add(e.id))throw new IllegalArgumentException("Invalid entry identity");
-            Config.amount(Double.toString(e.unit)); last = e.elapsed;
+            Config.validateRecordedPrice(e.unit); last = e.elapsed;
         }
         cached = null; cachedRevision = -1; cachedSpending = null;
         cachedAnalytics = null; analyticsRevision = -1; analyticsMillis = -1;

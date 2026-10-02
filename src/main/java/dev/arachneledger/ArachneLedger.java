@@ -66,6 +66,8 @@ public final class ArachneLedger implements ClientModInitializer {
         // Background fetches publish their results here before prices are persisted or used.
         if (BazaarPrices.GLOBAL.tick(tracker.config, now)) tracker.saveConfig();
         if (!tracker.config.rngTitles) tracker.rng.clear();
+        tracker.rng.setVisible(mc.player != null && !mc.options.hideGui
+            && (mc.screen == null || mc.screen instanceof ChatScreen), now);
         observeRewardLabels(mc, now);
         for (var summary : tracker.drainKillSummaries()) {
             if (mc.player != null) mc.gui.getChat().addClientSystemMessage(killSummaryMessage(summary));
@@ -130,6 +132,9 @@ public final class ArachneLedger implements ClientModInitializer {
             lastLevel = mc.level;
         }
         if (mc.player != null) tracker.account(mc.player.getUUID().toString());
+        // Sidebar refreshes are throttled; container eligibility cannot be, because an
+        // NPC menu may open and close before the next purse snapshot is read.
+        tracker.observeMenu(mc.screen instanceof AbstractContainerScreen<?>, now);
         if (changed || unloaded) updateContext(mc, now);
         tracker.refreshArea(now);
     }

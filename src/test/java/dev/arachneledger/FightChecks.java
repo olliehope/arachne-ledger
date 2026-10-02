@@ -116,6 +116,28 @@ public final class FightChecks {
         Config migrated=Store.read(path,Config.class,Config::new,Config::validate);eq(10000,migrated.minimumDamage,"Old settings receive minimum damage default");yes(migrated.killChat,"Old settings receive chat default");
         migrated.minimumDamage=12345;migrated.killChat=false;Store.write(path,migrated);
         Config saved=Store.read(path,Config.class,Config::new,Config::validate);eq(12345,saved.minimumDamage,"Custom damage threshold persists");yes(!saved.killChat,"Chat preference persists");
+        pausedPreview();
         System.out.println("PASS: "+checks+" fight timing, AFK, damage qualification and kill-summary checks.");
+    }
+
+    private static void pausedPreview() throws Exception {
+        var paused = tracker();
+        message(paused,SPAWN,1000);
+        tick(paused,2000);
+        paused.config.paused=true;
+        tick(paused,2100);
+        yes(paused.ledger.fights.getFirst().outcome==FightRecord.Outcome.INTERRUPTED,"Direct pause transition interrupts the previous fight once");
+        yes(!paused.acceptsLoot(BASE+2100),"Pause invalidates the previous pickup window");
+        yes(paused.rng.notice("TARANTULA_LEGENDARY",1,100,BASE+2200),"A local preview can be queued while tracking is paused");
+        tick(paused,2300);
+        tick(paused,2400);
+        yes(paused.rng.current(BASE+2400)!=null,"Paused ticks preserve an explicitly requested title preview");
+        eq(0,paused.ledger.stats(false).loot().size(),"Title preview does not add synthetic loot");
+        eq(1000,paused.ledger.activeMillis,"Paused preview does not restart active time");
+        paused.config.paused=false;
+        tick(paused,2500);
+        yes(paused.waitingForSpawn(),"Resume waits for a fresh boss rather than reviving the interrupted fight");
+        paused.pickup("SOUL_STRING",44,BASE+2600);
+        eq(0,paused.ledger.stats(false).revenue(),"Resume cannot revive the old pickup window");
     }
 }

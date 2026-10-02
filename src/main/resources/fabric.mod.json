@@ -5,7 +5,12 @@
   "name": "Arachne Ledger",
   "description": "Arachne loot, crystal costs, session and lifetime profit, hourly rates and graphs.",
   "authors": ["Arachne Ledger contributors"],
+  "contact": {
+    "sources": "https://github.com/olliehope/arachne-ledger",
+    "issues": "https://github.com/olliehope/arachne-ledger/issues"
+  },
   "license": "MIT",
+  "icon": "assets/arachneledger/icon.png",
   "environment": "client",
   "entrypoints": {"client": ["dev.arachneledger.ArachneLedger"]},
   "mixins": ["arachneledger.mixins.json"],

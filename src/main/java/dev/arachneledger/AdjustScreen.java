@@ -15,10 +15,11 @@ public final class AdjustScreen extends Screen {
     private String note="Correct missing drops or add actual coin adjustments.";
     public AdjustScreen(Screen parent){super(Component.literal("Ledger adjustments"));this.parent=parent;}
     @Override protected void init(){
+        String input=amount==null?"1":amount.getValue();
         w=Math.min(500,width-20);x=(width-w)/2;y=Math.max(8,(height-234)/2);
         addRenderableWidget(new FlatButton(x+16,y+42,24,20,"<",false,()->index=Math.floorMod(index-1,ids.size())));
         addRenderableWidget(new FlatButton(x+w-40,y+42,24,20,">",false,()->index=(index+1)%ids.size()));
-        amount=new EditBox(font,x+140,y+74,w-156,20,Component.literal("Quantity or coins"));amount.setMaxLength(24);amount.setValue("1");addRenderableWidget(amount);
+        amount=new EditBox(font,x+140,y+74,w-156,20,Component.literal("Quantity or coins"));amount.setMaxLength(24);amount.setValue(input);addRenderableWidget(amount);
         int bw=(w-40)/3;
         addRenderableWidget(new FlatButton(x+16,y+107,bw,20,"Add loot",true,()->attempt(()->{
             double n=Config.amount(amount.getValue());if(n<1||n>1_000_000||n!=Math.floor(n))throw new IllegalArgumentException("Loot quantity must be a whole number: 1-1,000,000.");
@@ -26,13 +27,19 @@ public final class AdjustScreen extends Screen {
         })));
         addRenderableWidget(new FlatButton(x+20+bw,y+107,bw,20,"Add income",false,()->addMoney(true)));
         addRenderableWidget(new FlatButton(x+24+bw*2,y+107,bw,20,"Add expense",false,()->addMoney(false)));
-        addRenderableWidget(new FlatButton(x+16,y+141,bw,20,"Undo last",false,()->note=t.undo()?"Removed last session entry.":"No session entries to undo."));
+        addRenderableWidget(new FlatButton(x+16,y+141,bw,20,"Undo last",false,()->attempt(()->note=t.undo()?"Removed last session entry.":"No session entries to undo.")));
         addRenderableWidget(new FlatButton(x+20+bw,y+141,bw,20,"Export CSV",false,()->{
             try{note="Saved in config/arachneledger/exports";ArachneLedger.say("Exported: "+t.export());}catch(Exception ex){note=ex.getMessage();}
         }));
         addRenderableWidget(new FlatButton(x+24+bw*2,y+141,bw,20,"Back",false,this::onClose));
     }
-    private void attempt(Runnable action){try{action.run();t.save();}catch(Exception ex){note=ex.getMessage();}}
+    private void attempt(Runnable action){
+        if(!"".equals(t.error)){note="Storage error; changes were not saved. See Minecraft log.";return;}
+        try{
+            action.run();t.save();
+            if(!"".equals(t.error))note="Storage error; changes were not saved. See Minecraft log.";
+        }catch(Exception ex){note=ex.getMessage();}
+    }
     private void addMoney(boolean income){attempt(()->{t.record(income?Ledger.Kind.INCOME:Ledger.Kind.EXPENSE,"MANUAL",1,Config.amount(amount.getValue()),"manual",System.currentTimeMillis());note="Coin adjustment saved.";});}
     @Override public void extractBackground(GuiGraphicsExtractor g,int mx,int my,float delta){g.fill(0,0,width,height,0xDF101010);}
     @Override public void extractRenderState(GuiGraphicsExtractor g,int mx,int my,float delta){

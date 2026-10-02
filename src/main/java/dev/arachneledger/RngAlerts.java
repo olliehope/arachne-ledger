@@ -13,11 +13,13 @@ public final class RngAlerts {
     private static final long FADE_IN_MILLIS = 150, FADE_OUT_MILLIS = 700;
     private static final int MAX_QUEUED = 8;
     private final Deque<Notice> notices = new ArrayDeque<>();
+    private long hiddenSince = -1, hiddenMillis;
     private record Notice(String item, int count, double value, long start) {}
     public record Display(String item, String title, String valueText, int color, double alpha) {}
 
     /** The value is the recorded drop value, not the whole fight's net profit. */
     public boolean notice(String item, int count, double unitValue, long now) {
+        now = visibleTime(now);
         expire(now);
         if (rarityColor(item) == 0 || count <= 0 || notices.size() >= MAX_QUEUED) return false;
         double value = Double.isFinite(unitValue) && unitValue > 0 ? unitValue * count : 0;
@@ -27,6 +29,7 @@ public final class RngAlerts {
         return true;
     }
     public Display current(long now) {
+        now = visibleTime(now);
         expire(now);
         Notice notice = notices.peekFirst();
         if (notice == null || now < notice.start()) return null;
@@ -37,7 +40,18 @@ public final class RngAlerts {
         String value = notice.value() > 0 ? "+" + Format.coins(notice.value()) + " coins" : "Unpriced";
         return new Display(notice.item(), title, value, rarityColor(notice.item()), Math.max(0, alpha));
     }
-    public void clear() { notices.clear(); }
+    /** Inventory screens and F1 hide this overlay; its four seconds should be visible time. */
+    public void setVisible(boolean visible, long now) {
+        if (!visible && hiddenSince < 0) hiddenSince = now;
+        else if (visible && hiddenSince >= 0) {
+            hiddenMillis += Math.max(0, now - hiddenSince);
+            hiddenSince = -1;
+        }
+    }
+    private long visibleTime(long now) {
+        return now - hiddenMillis - (hiddenSince < 0 ? 0 : Math.max(0, now - hiddenSince));
+    }
+    public void clear() { notices.clear(); hiddenSince = -1; hiddenMillis = 0; }
     public int queued() { return notices.size(); }
     private void expire(long now) {
         while (!notices.isEmpty() && now - notices.peekFirst().start() >= DURATION_MILLIS) notices.removeFirst();

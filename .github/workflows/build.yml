@@ -2,7 +2,7 @@ name: Build and check
 
 on:
   push:
-    branches: [main]
+    branches: [master, main]
   pull_request:
   workflow_dispatch:
 

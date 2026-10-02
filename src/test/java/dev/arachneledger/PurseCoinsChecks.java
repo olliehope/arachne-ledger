@@ -100,6 +100,31 @@ public final class PurseCoinsChecks {
         eq(10,t.ledger.scavengerCoins(false),"Current session subtotal");
         yes(t.undo(),"Coin entry can be undone");
         eq(0,t.ledger.scavengerCoins(false),"Undo updates subtotal without stale cache");
+        shortMenu();
         System.out.println("Purse coins checks passed: " + checks);
+    }
+
+    private static void shortMenu() throws Exception {
+        var tracker = new Tracker(Files.createTempDirectory("arachne-short-menu-"));
+        tracker.account("account");
+        tracker.updateLocation(true,true,true,"Arachne's Sanctuary","fixture",BASE);
+        tracker.message("[BOSS] Arachne: With your sacrifice.","Player",BASE+100);
+        tracker.observePurse(row(1000,0),false,BASE+200);
+        tracker.observePurse(row(1100,100),false,BASE+700);
+        eq(100,tracker.ledger.scavengerCoins(false),"Fixture has a continuous eligible purse baseline");
+        // These menu transitions fall between two of the adapter's half-second polls.
+        tracker.observeMenu(true,BASE+800);
+        tracker.observeMenu(false,BASE+900);
+        tracker.observePurse(row(201100,200000),false,BASE+1200);
+        eq(100,tracker.ledger.scavengerCoins(false),"Brief NPC menu excludes the next sale snapshot");
+        tracker.observePurse(row(201100,200000),false,BASE+2900);
+        tracker.observePurse(row(201200,100),false,BASE+3400);
+        eq(200,tracker.ledger.scavengerCoins(false),"Genuine rewards resume after the menu cooldown");
+        tracker.observeMenu(true,BASE+3500);
+        tracker.observeMenu(false,BASE+3600);
+        tracker.observePurse(row(401200,200000),false,BASE+9000);
+        eq(200,tracker.ledger.scavengerCoins(false),"A stalled snapshot after cooldown still establishes a fresh baseline");
+        tracker.observePurse(row(401300,100),false,BASE+9500);
+        eq(300,tracker.ledger.scavengerCoins(false),"Fresh reward after a stalled menu is counted once");
     }
 }

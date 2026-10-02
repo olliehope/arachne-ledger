@@ -14,7 +14,12 @@ public final class Store {
         try { return parse(file, type, validate); } catch (Exception ex) { original = ex; }
         try {
             T restored = parse(backup(file), type, validate);
-            if (Files.exists(file)) Files.move(file, file.resolveSibling(file.getFileName() + ".corrupt-" + System.currentTimeMillis()));
+            if (Files.exists(file)) {
+                // Recovery can run twice in the same millisecond. Reserve a unique quarantine
+                // filename instead of letting a timestamp collision block a usable backup.
+                Path corrupt = Files.createTempFile(file.toAbsolutePath().getParent(), file.getFileName() + ".corrupt-", "");
+                Files.move(file, corrupt, StandardCopyOption.REPLACE_EXISTING);
+            }
             write(file, restored);
             return restored;
         } catch (Exception ex) { throw new IOException("Cannot load " + file.getFileName() + "; originals preserved", original); }
@@ -27,7 +32,7 @@ public final class Store {
         }
     }
     public static void write(Path file, Object value) throws IOException {
-        Files.createDirectories(file.getParent());
+        Files.createDirectories(file.toAbsolutePath().getParent());
         Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
         try (Writer w = Files.newBufferedWriter(tmp)) { GSON.toJson(value, w); }
         if (Files.exists(file)) Files.copy(file, backup(file), StandardCopyOption.REPLACE_EXISTING);

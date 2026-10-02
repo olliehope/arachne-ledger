@@ -45,7 +45,7 @@ public final class DashboardScreen extends Screen {
         var b=new FlatButton(xx,yy,ww,hh,label,selected,action);
         b.setTooltip(Tooltip.create(Component.literal(tip)));addRenderableWidget(b);
     }
-    private void setNote(String text){note=text;noteUntil=System.currentTimeMillis()+6000;}
+    private void setNote(String text){note="".equals(t.error)?text:"Storage error; changes were not saved. See Minecraft log.";noteUntil=System.currentTimeMillis()+6000;}
     @Override public void tick(){if(confirmUntil!=0&&System.currentTimeMillis()>confirmUntil){confirmUntil=0;rebuildWidgets();}}
     @Override public void extractBackground(GuiGraphicsExtractor g,int mx,int my,float delta){g.fill(0,0,width,height,0x80000000);}
     @Override public void extractRenderState(GuiGraphicsExtractor g,int mx,int my,float delta){
@@ -102,8 +102,8 @@ public final class DashboardScreen extends Screen {
             rows.add(row("Unpriced drops",Long.toString(s.unpriced()),s.unpriced()>0?Hud.TITLE:Graph.MUTED,"Set prices and use Reprice session to value these drops."));
             drawRows(g,rows,top,bottom,mx,my);
         }
-        String footer=System.currentTimeMillis()<noteUntil?note:!t.error.isEmpty()?"Storage error - check logs":s.unpriced()>0?s.unpriced()+" unpriced drop"+(s.unpriced()==1?"":"s")+" · set Prices":!a.projectionReady()?"Projection: waiting for 60s and a kill":a.windowKills()<3?"Projection: small sample":t.status();
-        if(graphView&&System.currentTimeMillis()>=noteUntil&&t.error.isEmpty()) {
+        String footer=!"".equals(t.error)?"Storage error - check logs":System.currentTimeMillis()<noteUntil?note:s.unpriced()>0?s.unpriced()+" unpriced drop"+(s.unpriced()==1?"":"s")+" · set Prices":!a.projectionReady()?"Projection: waiting for 60s and a kill":a.windowKills()<3?"Projection: small sample":t.status();
+        if(graphView&&System.currentTimeMillis()>=noteUntil&&"".equals(t.error)) {
             List<String> parts=new ArrayList<>();
             if(t.config.graph.showActiveTime)parts.add("Active "+Hud.shortTime(graph.elapsed()));
             if(t.config.graph.showSpawnCount)parts.add("Spawns "+graph.spawnCount());
@@ -151,8 +151,15 @@ public final class DashboardScreen extends Screen {
     }
     @Override public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event,boolean doubleClick) {
         if(t.config.dashboardFights && event.button()==0 && event.x()>=x+10 && event.x()<x+w-10 && event.y()>=y+119 && event.y()<y+h-52) {
-            var fights=t.ledger.recentFights(t.config.total);int index=scroll+(int)((event.y()-(y+121))/25);
-            if(index>=0 && index<fights.size()){minecraft.setScreen(new FightDetailsScreen(this,fights.get(index).id));return true;}
+            var fights=t.ledger.recentFights(t.config.total);
+            int top=y+121,visible=Math.max(1,(y+h-52-top)/25);
+            scroll=Math.max(0,Math.min(scroll,Math.max(0,fights.size()-visible)));
+            int row=(int)Math.floor((event.y()-(top-2))/25);
+            // Match the rendered row bounds, excluding unused space below the last row.
+            if(row>=0 && row<visible && scroll+row<fights.size()
+                    && event.y()<top+row*25+22){
+                minecraft.setScreen(new FightDetailsScreen(this,fights.get(scroll+row).id));return true;
+            }
         }
         return super.mouseClicked(event,doubleClick);
     }

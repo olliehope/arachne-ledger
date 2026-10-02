@@ -3,6 +3,9 @@ package dev.arachneledger;
 import java.util.*;
 
 public final class Config {
+    public static final double MAX_MANUAL_PRICE = 1_000_000_000_000.0;
+    // A Crystal uses 34 priced ingredients; its recorded unit cost can exceed any one input.
+    private static final double MAX_RECORDED_PRICE = 34 * MAX_MANUAL_PRICE;
     public enum View { COMPACT, DETAILED, GRAPH }
     public enum BazaarMode { INSTANT_SELL, SELL_OFFER;
         public String label() { return this==INSTANT_SELL?"Instant sell":"Sell offer"; }
@@ -88,9 +91,14 @@ public final class Config {
     public double effectiveCrystalCost() { return crystalConfigured ? crystalCost : recipeCost(); }
     public static double amount(String input) {
         double n = Double.parseDouble(input.trim().replace(",", ""));
-        if (!Double.isFinite(n) || n < 0 || n > 1_000_000_000_000.0)
+        if (!Double.isFinite(n) || n < 0 || n > MAX_MANUAL_PRICE)
             throw new IllegalArgumentException("Use a number from 0 to 1 trillion.");
         return n;
+    }
+    /** Composite recipe/salvage values are journal amounts, rather than individual price inputs. */
+    static void validateRecordedPrice(double value) {
+        if (!Double.isFinite(value) || value < 0 || value > MAX_RECORDED_PRICE)
+            throw new IllegalArgumentException("Invalid recorded unit price.");
     }
     public void validate() {
         if (view == null || prices == null || profile == null || !profile.matches("[A-Za-z0-9_-]{1,32}"))

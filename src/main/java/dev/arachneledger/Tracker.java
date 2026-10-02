@@ -13,7 +13,7 @@ public final class Tracker {
     private final Path root;
     private Path ledgerFile;
     public String error = "";
-    private boolean blocked, dirty;
+    private boolean blocked, dirty, wasPaused;
     private String owner = "";
     private long lastTick, lastSave, lootUntil, pendingDown, lastDown, lastPlacement;
     private long standLootUntil;
@@ -50,6 +50,7 @@ public final class Tracker {
         this.root = root;
         try { config = Store.read(root.resolve("settings.json"), Config.class, Config::new, Config::validate); }
         catch (IOException ex) { fail(ex); }
+        wasPaused = config.paused;
     }
     private void fail(Exception ex) { error = ex.getMessage(); blocked = true; LOG.error("Arachne Ledger persistence error", ex); }
     public boolean ready() { return !blocked && ledgerFile != null; }
@@ -75,6 +76,7 @@ public final class Tracker {
         lastPlacementMessage = ""; inArena = false; inSkyblock = false;
         lootDeduplicator.reset();
         area.reset(); detectionReason = "Waiting for Hypixel SkyBlock"; location = "";
+        wasPaused = config.paused;
     }
     private void clearFightContext() {
         if(fight!=null){fight.history.outcome=FightRecord.Outcome.INTERRUPTED;fight.history.activeEnd=ledger.activeMillis;dirty=true;}
@@ -107,7 +109,10 @@ public final class Tracker {
         if (inArena && !arena) clearFightContext();
         inArena = arena;
         advanceClock(now, arena);
-        if (config.paused) clearFightContext();
+        // Interrupt once at the pause transition. Re-clearing every frame discards an
+        // explicit /arachne rng test preview even though no tracking context was revived.
+        if (config.paused && !wasPaused) clearFightContext();
+        wasPaused = config.paused;
         if(pendingFight!=null && now-pendingDown>5000){pendingFight.history.outcome=FightRecord.Outcome.MISSING_DAMAGE;pendingFight=null;pendingDown=0;dirty=true;}
         flushReports(now);
         if (now - lastSave > 10_000) { save(); lastSave = now; }
@@ -229,11 +234,19 @@ public final class Tracker {
     public List<KillSummary> drainKillSummaries() {
         List<KillSummary> result = List.copyOf(reports); reports.clear(); return result;
     }
+    /** Observe every tick, even when a short-lived menu falls between sidebar snapshots. */
+    public void observeMenu(boolean menuOpen, long now) {
+        // Server purse updates can arrive after an NPC menu closes. Clearing the pairing
+        // baseline immediately also protects a client stall that outlasts this cooldown.
+        if (menuOpen || purseMenuOpen) {
+            purseMenuUntil = now + 2_000;
+            purseCoins.reset();
+        }
+        purseMenuOpen = menuOpen;
+    }
     /** Observe even when ineligible so menus and idle purse gains cannot leak into a fight. */
     public void observePurse(List<String> sidebar, boolean menuOpen, long now) {
-        // Server purse updates can arrive after an NPC menu closes; baseline those too.
-        if (menuOpen || purseMenuOpen) purseMenuUntil = now + 2_000;
-        purseMenuOpen = menuOpen;
+        observeMenu(menuOpen, now);
         boolean eligible = ready() && config.scavengerCoins && !config.paused && inArena && !menuOpen && now >= purseMenuUntil
             && (fight != null || (rewardFight != null && now >= rewardFight.died && now - rewardFight.died <= 10_000));
         double coins = purseCoins.observe(sidebar, eligible, now);
@@ -250,17 +263,19 @@ public final class Tracker {
         if (!acceptsStandLoot(now) || lootDeduplicator.hasSeenStand(uuid)) return;
         LootLabels.Drop drop = LootLabels.parse(name);
         if (drop == null) return;
-        if (!lootDeduplicator.acceptStand(uuid, drop.item(), drop.count(), now)) return;
+        long count = lootDeduplicator.acceptStandCount(uuid, drop.item(), drop.count(), now);
+        if (count == 0) return;
         double price = config.lootPrice(drop.item());
-        record(Ledger.Kind.LOOT, drop.item(), drop.count(), price, "armor_stand", now,
+        record(Ledger.Kind.LOOT, drop.item(), count, price, "armor_stand", now,
             rewardFight == null ? 0 : rewardFight.history.id);
         noteReward(rewardFight, now);
-        if (config.rngTitles) rng.notice(drop.item(), (int)drop.count(), price, now);
+        if (config.rngTitles) rng.notice(drop.item(), (int)count, price, now);
     }
     public void pickup(String item, int count, long now) {
         if (!acceptsLoot(now) || !Catalog.ITEMS.containsKey(item) || count <= 0) return;
         boolean standWindow = acceptsStandLoot(now);
-        if (!lootDeduplicator.acceptPickup(item, count, now, standWindow)) return;
+        count = (int)lootDeduplicator.acceptPickupCount(item, count, now, standWindow);
+        if (count == 0) return;
         Fight target = standWindow ? rewardFight : fight;
         double price = config.lootPrice(item);
         record(Ledger.Kind.LOOT, item, count, price, "pickup", now, target == null ? 0 : target.history.id);
@@ -285,7 +300,7 @@ public final class Tracker {
     }
     public boolean undo() { boolean changed = ready() && ledger.undo(); if (changed) { dirty = true; save(); } return changed; }
     public void reprice(String id, double amount) { if (ready()) { ledger.reprice(id, amount); dirty = true; save(); } }
-    public void togglePause() { config.paused = !config.paused; clearFightContext(); saveConfig(); }
+    public void togglePause() { config.paused = !config.paused; clearFightContext(); wasPaused = config.paused; saveConfig(); }
     public void toggleScope() { config.total = !config.total; saveConfig(); }
     public void cycleView() { config.hudView = Config.View.values()[(config.hudView.ordinal()+1)%3]; saveConfig(); }
     public void saveConfig() {

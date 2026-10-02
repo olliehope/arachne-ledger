@@ -14,41 +14,52 @@ public final class SettingsScreen extends Screen {
     private final Map<String, Double> draft = new LinkedHashMap<>(t.config.prices);
     private final Set<String> manual = new LinkedHashSet<>(t.config.manualPriceItems == null
         ? t.config.prices.keySet() : t.config.manualPriceItems);
+    private final Map<String, String> priceInputs = new HashMap<>();
     private EditBox crystal, calling, price;
+    private String fixedCrystalInput = Double.toString(t.config.crystalCost);
+    private String callingInput = Double.toString(t.config.callingCost), priceItem;
     private int index, x, y, w;
     private boolean recipe = !t.config.crystalConfigured;
     private boolean autoBazaar = t.config.autoBazaar;
     private String note = "Saved prices stay manual until you choose Auto.";
     public SettingsScreen(Screen parent) { super(Component.literal("Arachne prices")); this.parent = parent; }
     @Override protected void init() {
+        // Minecraft recreates widgets on resize and when returning from another screen.
+        // Keep the editable draft separate from both the widgets and the recipe preview.
+        if (crystal != null && crystal.active) fixedCrystalInput = crystal.getValue();
+        if (calling != null) callingInput = calling.getValue();
+        if (price != null && price.active) priceInputs.put(priceItem, price.getValue());
         w = Math.min(500, width-20); x = (width-w)/2; y = Math.max(6, (height-228)/2);
         addRenderableWidget(new FlatButton(x+w-148, y+8, 132, 18,
             autoBazaar ? "Auto Bazaar: on" : "Auto Bazaar: off", autoBazaar, () -> {
                 if (!rememberPrice()) return;
                 autoBazaar = !autoBazaar;
-                if (commit()) { refreshBazaar(); rebuildKeepingCosts(); }
+                if (commit()) { refreshBazaar(); rebuildWidgets(); }
             }));
         var saleMode = new FlatButton(x+16, y+28, Math.min(120,w-170), 18,
             t.config.bazaarMode.label(), t.config.bazaarMode==Config.BazaarMode.SELL_OFFER, () -> {
                 if(!commit())return;
                 t.config.bazaarMode=t.config.bazaarMode==Config.BazaarMode.INSTANT_SELL
                     ?Config.BazaarMode.SELL_OFFER:Config.BazaarMode.INSTANT_SELL;
-                t.saveConfig(); refreshBazaar(); rebuildKeepingCosts();
+                t.saveConfig(); refreshBazaar(); rebuildWidgets();
             });
         saleMode.setTooltip(Tooltip.create(Component.literal("Choose the Bazaar estimate for future items: instant sell or a sell offer. Both are before tax; sell offers can take time or remain unfilled. Manual prices win. Reprice session explicitly to change recorded values.")));
         addRenderableWidget(saleMode);
         crystal = field(x+w-148, y+48, 132, "Crystal cost",
-            t.config.crystalConfigured ? t.config.crystalCost : t.config.recipeCost());
+            recipe ? Double.toString(t.config.recipeCost()) : fixedCrystalInput);
         crystal.active = !recipe;
         addRenderableWidget(new FlatButton(x+16, y+48, 120, 20, recipe ? "Recipe cost" : "Fixed cost", recipe, () -> {
             if (!rememberPrice()) return;
-            recipe = !recipe; rebuildKeepingCosts();
+            recipe = !recipe; rebuildWidgets();
         }));
-        calling = field(x+w-148, y+72, 132, "Calling cost", t.config.callingCost);
+        calling = field(x+w-148, y+72, 132, "Calling cost", callingInput);
         addRenderableWidget(new FlatButton(x+16, y+96, 24, 18, "<", false, () -> change(-1)));
         addRenderableWidget(new FlatButton(x+w-40, y+96, 24, 18, ">", false, () -> change(1)));
-        price = field(x+w-148, y+120, 132, "Loot unit price", draftPrice(ids.get(index)));
-        price.active = manual.contains(ids.get(index));
+        priceItem = ids.get(index);
+        price = field(x+w-148, y+120, 132, "Loot unit price", manual.contains(priceItem)
+            ? priceInputs.getOrDefault(priceItem, Double.toString(draftPrice(priceItem)))
+            : Double.toString(draftPrice(priceItem)));
+        price.active = manual.contains(priceItem);
         addRenderableWidget(new FlatButton(x+16, y+120, 90, 20,
             price.active ? "Manual price" : "Auto price", !price.active, this::toggleManual));
         int utilities = (w-44)/4;
@@ -58,12 +69,12 @@ public final class SettingsScreen extends Screen {
             autoBazaar = true;
             if (commit()) {
                 refreshBazaar();
-                note = "Bazaar materials use Auto; other saved prices are kept."; rebuildKeepingCosts();
+                note = "Bazaar materials use Auto; other saved prices are kept."; rebuildWidgets();
             }
         }));
         addRenderableWidget(new FlatButton(x+20+utilities, y+163, utilities, 18, t.config.hud ? "HUD: on" : "HUD: off", false, () -> {
             if (!rememberPrice()) return;
-            t.config.hud = !t.config.hud; t.saveConfig(); rebuildKeepingCosts();
+            t.config.hud = !t.config.hud; t.saveConfig(); rebuildWidgets();
         }));
         addRenderableWidget(new FlatButton(x+28+utilities*3, y+163, utilities, 18, "Edit HUD", false, () -> {
             if (commit()) minecraft.setScreen(new HudEditorScreen(this));
@@ -80,7 +91,7 @@ public final class SettingsScreen extends Screen {
                 for (String id : ids) t.reprice(id, t.config.lootPrice(id));
                 t.reprice("ARACHNE_CRYSTAL", t.config.effectiveCrystalCost());
                 t.reprice("ARACHNE_KEEPER_FRAGMENT", t.config.callingCost);
-                note = "Session repriced; older sessions unchanged.";
+                if (!"".equals(t.error)) storageError(); else note = "Session repriced; older sessions unchanged.";
             }
         }));
         addRenderableWidget(new FlatButton(x+24+bw*2, y+205, bw, 20, "Back", false, this::onClose));
@@ -89,9 +100,9 @@ public final class SettingsScreen extends Screen {
         return autoBazaar && !manual.contains(id) && t.config.selectedBazaarPrices().containsKey(id)
             ? t.config.selectedBazaarPrices().get(id) : draft.getOrDefault(id, 0.0);
     }
-    private EditBox field(int xx, int yy, int ww, String title, double value) {
+    private EditBox field(int xx, int yy, int ww, String title, String value) {
         EditBox box = new EditBox(font, xx, yy, ww, 20, Component.literal(title)); box.setMaxLength(24);
-        box.setValue(Double.toString(value)); addRenderableWidget(box); return box;
+        box.setValue(value); addRenderableWidget(box); return box;
     }
     private boolean rememberPrice() {
         try { if (price != null && price.active) draft.put(ids.get(index), Config.amount(price.getValue())); return true; }
@@ -99,7 +110,7 @@ public final class SettingsScreen extends Screen {
     }
     private void change(int delta) {
         if (!rememberPrice()) return;
-        index = Math.floorMod(index+delta, ids.size()); rebuildKeepingCosts();
+        index = Math.floorMod(index+delta, ids.size()); rebuildWidgets();
     }
     private void toggleManual() {
         if (!rememberPrice()) return;
@@ -107,26 +118,30 @@ public final class SettingsScreen extends Screen {
         if (manual.contains(id)) {
             if (!BazaarPrices.supports(id, t.config)) { note = "No Bazaar price for this item; enter a manual value."; return; }
             manual.remove(id);
-        } else { draft.put(id, draftPrice(id)); manual.add(id); }
-        rebuildKeepingCosts();
+        } else {
+            draft.put(id, draftPrice(id)); manual.add(id);
+            priceInputs.put(id, Double.toString(draft.get(id)));
+        }
+        rebuildWidgets();
     }
     private boolean commit() {
+        if (!"".equals(t.error)) { storageError(); return false; }
         try {
             if (!rememberPrice()) return false;
-            double c = Config.amount(crystal.getValue()), a = Config.amount(calling.getValue());
+            double c = Config.amount(recipe ? fixedCrystalInput : crystal.getValue()), a = Config.amount(calling.getValue());
             t.config.crystalCost = c; t.config.callingCost = a; t.config.crystalConfigured = !recipe;
             t.config.prices = new LinkedHashMap<>(draft); t.config.manualPriceItems = new LinkedHashSet<>(manual);
-            t.config.autoBazaar = autoBazaar; t.saveConfig(); return true;
+            t.config.autoBazaar = autoBazaar; t.saveConfig();
+            if (!"".equals(t.error)) { storageError(); return false; }
+            return true;
         } catch (RuntimeException ex) { note = "Invalid price. Use a number from 0 to 1 trillion."; return false; }
     }
-    private void rebuildKeepingCosts() {
-        String c = crystal.getValue(), a = calling.getValue();
-        rebuildWidgets(); crystal.setValue(c); calling.setValue(a);
-    }
+    private void storageError() { note = "Storage error; prices were not saved. See Minecraft log."; }
     private void refreshBazaar() {
         if (BazaarPrices.GLOBAL.tick(t.config, System.currentTimeMillis())) t.saveConfig();
     }
     @Override public void tick() {
+        if (!"".equals(t.error)) storageError();
         if (price != null && !price.active) price.setValue(Double.toString(draftPrice(ids.get(index))));
         if (crystal != null && recipe) crystal.setValue(Double.toString(t.config.recipeCost()));
     }

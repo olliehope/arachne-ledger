@@ -56,6 +56,50 @@ public final class LootTrackingChecks {
         t.updateLocation(true,true,true,"Arachne's Sanctuary","sidebar",now+46_200);
         t.observeLootStand(id(8),"§fString x10",now+46_201);
         eq(20,t.ledger.stats(false).loot().getOrDefault("STRING",0L),"Leaving arena clears reward window");
+        splitPickups();
         System.out.println("PASS: " + checks + " reward, summon and duplicate-suppression checks.");
+    }
+
+    private static Tracker rewardTracker() throws Exception {
+        var tracker = new Tracker(Files.createTempDirectory("arachne-split-pickup-"));
+        tracker.account("owner");
+        tracker.config.manualSet("STRING",10);
+        tracker.config.manualSet("ARACHNE_FANG",100);
+        tracker.updateLocation(true,true,true,"Arachne's Sanctuary","fixture",1_000_000);
+        tracker.message("[BOSS] Arachne: With your sacrifice.","Player",1_000_100);
+        tracker.message("ARACHNE DOWN!","Player",1_001_000);
+        tracker.message("Your Damage: 10,000 (Position #1)","Player",1_001_010);
+        return tracker;
+    }
+
+    private static void splitPickups() throws Exception {
+        var standFirst = rewardTracker();
+        standFirst.observeLootStand(id(30),"String x10",1_001_100);
+        standFirst.pickup("STRING",5,1_001_200);
+        standFirst.pickup("STRING",5,1_001_300);
+        eq(10,standFirst.ledger.stats(false).loot().get("STRING"),"Stand plus split pickups records ten units, not twenty");
+        eq(100,(long)standFirst.ledger.stats(false).revenue(),"Split pickup does not inflate session revenue");
+        eq(100,(long)standFirst.ledger.fightStats(standFirst.ledger.fights.getFirst().id).revenue(),"Fight revenue uses accepted units");
+        eq(100,(long)standFirst.ledger.stats(false).graph().getLast().profit(),"Graph endpoint uses accepted units");
+        standFirst.observeLootStand(id(31),"Arachne's Fang x2",1_001_400);
+        standFirst.pickup("ARACHNE_FANG",1,1_001_500);
+        standFirst.pickup("ARACHNE_FANG",1,1_001_600);
+        eq(2,standFirst.ledger.stats(false).loot().get("ARACHNE_FANG"),"Rare stack is reconciled across partial pickups");
+        eq(1,standFirst.rng.queued(),"Partial rare pickups do not replay the popup");
+        eq(300,(long)standFirst.ledger.stats(true).revenue(),"Lifetime value includes each unit once");
+
+        var pickupFirst = rewardTracker();
+        pickupFirst.pickup("STRING",5,1_001_100);
+        pickupFirst.observeLootStand(id(32),"String x10",1_001_200);
+        pickupFirst.pickup("STRING",5,1_001_300);
+        eq(10,pickupFirst.ledger.stats(false).loot().get("STRING"),"Partial pickup then full label records only missing units");
+        var entries = pickupFirst.ledger.entries.stream().filter(e -> e.kind() == Ledger.Kind.LOOT).toList();
+        eq(2,entries.size(),"Pickup and label produce two partial journal receipts");
+        eq(5,entries.getFirst().count(),"First journal receipt keeps five physical units");
+        eq(5,entries.getLast().count(),"Label journal receipt records five unseen units");
+        yes(entries.stream().allMatch(e -> e.fightId() == pickupFirst.ledger.fights.getFirst().id),"Partial receipts remain associated with their reward fight");
+        eq(100,(long)pickupFirst.ledger.stats(false).revenue(),"Pickup-first total uses ten recorded units");
+        pickupFirst.tick(1_004_000,true);
+        eq(100,(long)pickupFirst.drainKillSummaries().getFirst().income(),"Kill summary cannot inflate split reward value");
     }
 }
