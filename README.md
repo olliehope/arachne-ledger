@@ -5,10 +5,12 @@
 </p>
 
 <p align="center">
-  <a href="https://modrinth.com/project/arachne-profit-tracker">Modrinth Download</a> &middot;
-  <a href="https://github.com/olliehope/arachne-ledger/wiki">Wiki</a> &middot;
-  <a href="https://github.com/olliehope/arachne-ledger/releases">Releases</a> &middot;
-  <a href="CHANGELOG.md">Changelog</a>
+  <a href="https://modrinth.com/project/arachne-profit-tracker">
+    <img alt="Modrinth" src="https://img.shields.io/badge/Modrinth-Download-1BD96A?style=for-the-badge&amp;logo=modrinth&amp;logoColor=white">
+  </a>
+  <a href="https://github.com/olliehope/arachne-ledger/wiki">
+    <img alt="Wiki" src="https://img.shields.io/badge/Wiki-Documentation-D69E3A?style=for-the-badge">
+  </a>
 </p>
 
 ---
@@ -34,6 +36,8 @@ Required: **Minecraft 26.1.2, Fabric Loader, Fabric API, and Java 25**. Download
 ## Documentation
 
 Use the [Arachne Ledger Wiki](https://github.com/olliehope/arachne-ledger/wiki) for installation, HUD settings, pricing, commands, achievements, and troubleshooting.
+
+[GitHub Releases](https://github.com/olliehope/arachne-ledger/releases) · [Changelog](CHANGELOG.md)
 
 Contributor references, build instructions, and the code map are in [Development](docs/wiki/Development.md).
 
