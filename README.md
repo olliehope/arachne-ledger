@@ -136,6 +136,8 @@ The armor stand scan covers the visible Arachne rewards for 45 seconds after the
 
 ## Build and verify
 
+For development, start with the [code walkthrough](docs/ARCHITECTURE.md#reading-the-code) and [source-style guide](CONTRIBUTING.md#source-style). Run `./gradlew formatJava` or `.\gradlew.bat formatJava` before committing Java changes. Builds check formatting automatically.
+
 In this directory, run `gradlew.bat build` on Windows or `./gradlew build` on macOS/Linux using JDK 25. The build produces `build/libs/arachne-ledger-1.0.1.jar`. **1,436 checks across 19 regression suites passed**, covering accounting, graph series/labels/projections/spawn markers, price-mode selection and caches, location and reward detection, spawn/summoning/AFK timing, purse pairing, NPC/salvage valuations, damage qualification, chat summaries, persistent history/corrections, isolation, migration, Bazaar failure fallback, pet rarity labels, and rare-drop title deduplication.
 
 Run `gradlew.bat clean prepareRelease` to create the installable JAR, complete source ZIP, changelog notes and SHA-256 checksums in `build/release`. On Linux/macOS, use `bash ./gradlew clean prepareRelease`. The included GitHub workflows build pull requests and prepare a draft prerelease when you push a matching `v<version>` tag. Read [Publishing and releases](docs/RELEASING.md) before your first upload.

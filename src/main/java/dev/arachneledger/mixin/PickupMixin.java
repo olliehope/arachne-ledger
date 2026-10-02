@@ -1,10 +1,13 @@
 package dev.arachneledger.mixin;
 
-import dev.arachneledger.*;
+import dev.arachneledger.ArachneLedger;
+import dev.arachneledger.ItemIds;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.protocol.game.ClientboundTakeItemEntityPacket;
 import net.minecraft.world.entity.item.ItemEntity;
+
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -16,8 +19,15 @@ public abstract class PickupMixin {
     private void arachneLedger$pickup(ClientboundTakeItemEntityPacket packet, CallbackInfo ci) {
         Minecraft mc = Minecraft.getInstance();
         // Vanilla re-dispatches this handler to the render thread. Only observe that invocation.
-        if (!mc.isSameThread() || mc.player == null || mc.level == null || ArachneLedger.tracker == null) return;
-        if (packet.getPlayerId() != mc.player.getId()) return;
+        if (!mc.isSameThread()
+                || mc.player == null
+                || mc.level == null
+                || ArachneLedger.tracker == null) {
+            return;
+        }
+        if (packet.getPlayerId() != mc.player.getId()) {
+            return;
+        }
         long now = System.currentTimeMillis();
         ArachneLedger.prepareContext(mc, now);
         if (mc.level.getEntity(packet.getItemId()) instanceof ItemEntity item) {

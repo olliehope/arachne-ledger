@@ -26,6 +26,20 @@ The first build needs access to the configured dependency repositories. After th
 
 Keep changes focused. Preserve saved-data compatibility and the accounting invariants in the architecture document. Prefer a small helper with an explicit input/output over another responsibility in the Fabric entry point or Tracker. Explain why a comment matters—such as a packet ordering rule, migration constraint, or ownership invariant—rather than narrating every line.
 
+## Source style
+
+Run `./gradlew formatJava` (Windows: `.\gradlew.bat formatJava`) before committing Java changes. The pinned [google-java-format](https://github.com/google/google-java-format) tool uses AOSP's four-space indentation and a 100-column target. Long strings are kept intact so server-message patterns stay readable. The formatter is a build dependency only and is never bundled into the mod. `checkJavaFormat` reports differences without changing files; `build` and CI run that check automatically.
+
+- Use descriptive names such as `activeFight`, `panelWidth`, and `quantityField`; short loop counters and conventional coordinates are fine when their meaning is local.
+- Give control-flow bodies explicit braces, even for a single return. Keep one statement per line and separate fields with different meanings.
+- Split a long method into named domain steps. Prefer a focused helper or small class when multiple callers need the same rule; avoid one-line wrappers that add no meaning.
+- Use explicit imports and keep public APIs and JSON field names stable. Private state can be renamed freely; serialized data needs a migration.
+- Comment timing, ownership, historical-price, and packet-ordering rules. Let method names explain straightforward operations.
+
+For a first reading, follow the [code walkthrough](docs/ARCHITECTURE.md#reading-the-code) rather than starting with every renderer or saved-data field.
+
+## Regression checks
+
 `build` includes `check`, which runs the main-class `*Checks` regression suites through Gradle JavaExec tasks. The standard Gradle `test` task is disabled. Targeted examples:
 
 ```powershell

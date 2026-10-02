@@ -1,0 +1,38 @@
+// Keep source formatting reproducible without adding a Minecraft runtime dependency.
+configurations {
+    javaFormatter {
+        canBeConsumed = false
+        canBeResolved = true
+        transitive = false
+    }
+}
+
+dependencies {
+    javaFormatter "com.google.googlejavaformat:google-java-format:${google_java_format_version}:all-deps"
+}
+
+def javaSources = fileTree('src') { include '**/*.java' }
+def formatterJava = javaToolchains.launcherFor {
+    languageVersion = JavaLanguageVersion.of(25)
+}
+
+def registerFormattingTask = { String taskName, List<String> mode ->
+    tasks.register(taskName, Exec) {
+        group = 'verification'
+        description = taskName == 'formatJava'
+            ? 'Format all production and regression Java sources.'
+            : 'Check Java formatting without changing files.'
+        inputs.files(javaSources)
+        inputs.property('formatterVersion', google_java_format_version)
+        doFirst {
+            commandLine([formatterJava.get().executablePath.asFile.absolutePath,
+                '-jar', configurations.javaFormatter.singleFile.absolutePath,
+                '--aosp', '--max-line-length', '100', '--skip-reflowing-long-strings'] + mode +
+                javaSources.files.sort { it.path }.collect { it.absolutePath })
+        }
+    }
+}
+
+registerFormattingTask('formatJava', ['--replace'])
+registerFormattingTask('checkJavaFormat', ['--dry-run', '--set-exit-if-changed'])
+tasks.named('check') { dependsOn 'checkJavaFormat' }

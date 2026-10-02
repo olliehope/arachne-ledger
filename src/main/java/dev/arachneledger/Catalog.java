@@ -1,9 +1,12 @@
 package dev.arachneledger;
 
-import java.util.*;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
+/** Stable SkyBlock item IDs and display names, in the order used by the item selector. */
 public final class Catalog {
     public static final Map<String, String> ITEMS = new LinkedHashMap<>();
+
     static {
         ITEMS.put("SOUL_STRING", "Soul String");
         ITEMS.put("ARACHNE_FRAGMENT", "Arachne Fragment");
@@ -24,6 +27,10 @@ public final class Catalog {
         ITEMS.put("TARANTULA_EPIC", "Tarantula Pet (Epic)");
         ITEMS.put("TARANTULA_LEGENDARY", "Tarantula Pet (Legendary)");
     }
-    public static String name(String id) { return ITEMS.getOrDefault(id, id); }
+
+    public static String name(String id) {
+        return ITEMS.getOrDefault(id, id);
+    }
+
     private Catalog() {}
 }

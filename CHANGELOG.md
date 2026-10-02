@@ -2,6 +2,14 @@
 
 Public GitHub releases start at 1.0.0. Earlier development builds used separate numbering and are retained below for reference.
 
+## [Unreleased]
+
+- Reformatted production and regression Java sources consistently, expanded compressed statements, and made control-flow blocks explicit.
+- Replaced opaque tracking/UI names with domain names; split lifecycle, corrections, validation, and rendering into focused methods while preserving saved data and behavior.
+- Shared journal-derived fight/session arithmetic in `LedgerTotals` and separated release/formatter build logic from normal compilation.
+- Added a pinned build-time formatter, automatic format checking, a source-style guide, and a reading path through the modules.
+- Verified all 1,436 existing regression checks and 52 synthetic Minecraft UI interactions. Nine screenshots match the previous build exactly; two differ only in their displayed fight timestamps.
+
 ## [1.0.1]
 
 - Reconciled reward quantities across labels and split/stacked pickup packets, preventing partial pickups from counting loot twice. Kept pet claim deduplication across all three reward sources.

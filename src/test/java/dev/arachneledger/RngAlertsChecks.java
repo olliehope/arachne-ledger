@@ -6,20 +6,28 @@ import net.minecraft.network.chat.Component;
 /** Covers rarity identification, alert value and sequential title lifetime. */
 public final class RngAlertsChecks {
     private static int checks;
+
     private static void yes(boolean value, String label) {
         checks++;
-        if (!value) throw new AssertionError(label);
+        if (!value) {
+            throw new AssertionError(label);
+        }
     }
+
     private static void eq(Object expected, Object value, String label) {
         checks++;
-        if (!expected.equals(value)) throw new AssertionError(label + ": expected " + expected + ", got " + value);
+        if (!expected.equals(value)) {
+            throw new AssertionError(label + ": expected " + expected + ", got " + value);
+        }
     }
+
     private static void drop(String text, String item, int count) {
         var found = LootLabels.parse(text);
         yes(found != null, "Recognized pet/rare label " + text);
         eq(item, found.item(), "Item id for " + text);
         eq(count, found.count(), "Quantity for " + text);
     }
+
     public static void main(String[] args) {
         drop("§aArachne's Fang §8x2", "ARACHNE_FANG", 2);
         drop("Arachne Fang", "ARACHNE_FANG", 1);
@@ -32,15 +40,21 @@ public final class RngAlertsChecks {
         yes(LootLabels.parse("[Lvl 1] Tarantula") == null, "Uncoloured pet does not guess rarity");
         yes(LootLabels.parse("§d[Lvl 1] Tarantula") == null, "Mythic colour does not imply Epic");
         yes(LootLabels.parse("§aTarantula") == null, "Unsupported tier ignored");
-        yes(LootLabels.parse("§6[Lvl 1] §rTarantula") == null, "Colour reset prevents a false Legendary");
+        yes(
+                LootLabels.parse("§6[Lvl 1] §rTarantula") == null,
+                "Colour reset prevents a false Legendary");
         yes(LootLabels.parse("§5Tarantula Broodfather 100,000❤") == null, "Mob label excluded");
         yes(LootLabels.parse("§6Tarantula x0") == null, "Zero quantity excluded");
-        var component = Component.literal("[Lvl 1] ").withStyle(ChatFormatting.GRAY)
-            .append(Component.literal("Tarantula").withStyle(ChatFormatting.GOLD))
-            .append(Component.literal(" x2").withStyle(ChatFormatting.DARK_GRAY));
+        var component =
+                Component.literal("[Lvl 1] ")
+                        .withStyle(ChatFormatting.GRAY)
+                        .append(Component.literal("Tarantula").withStyle(ChatFormatting.GOLD))
+                        .append(Component.literal(" x2").withStyle(ChatFormatting.DARK_GRAY));
         drop(LootLabels.formatted(component), "TARANTULA_LEGENDARY", 2);
-        var inherited = Component.empty().withStyle(ChatFormatting.DARK_PURPLE)
-            .append(Component.literal("[Lvl 1] Tarantula"));
+        var inherited =
+                Component.empty()
+                        .withStyle(ChatFormatting.DARK_PURPLE)
+                        .append(Component.literal("[Lvl 1] Tarantula"));
         drop(LootLabels.formatted(inherited), "TARANTULA_EPIC", 1);
         eq("", LootLabels.formatted(null), "Null component safe");
 
@@ -58,7 +72,10 @@ public final class RngAlertsChecks {
         yes(!alerts.notice("ARACHNE_FANG", 0, 1, now), "Empty reward rejected");
         yes(alerts.notice("ARACHNE_FANG", 2, 500, now), "Rare title accepted");
         eq("2x Arachne's Fang", alerts.current(now + 200).title(), "Quantity displayed");
-        eq("+1.0k coins", alerts.current(now + 200).valueText(), "Value uses count times unit price");
+        eq(
+                "+1.0k coins",
+                alerts.current(now + 200).valueText(),
+                "Value uses count times unit price");
         yes(alerts.current(now).alpha() == 0, "Fades in from zero");
         yes(alerts.current(now + 200).alpha() == 1, "Full opacity after fade in");
         yes(alerts.current(now + 3_650).alpha() == .5, "Fades out over last 700ms");
@@ -70,7 +87,10 @@ public final class RngAlertsChecks {
         eq(1, alerts.queued(), "Expired first title removed");
         yes(alerts.current(now + 8000) == null, "Queue expires fully");
         yes(alerts.notice("TARANTULA_LEGENDARY", 1, 0, now + 9000), "Unpriced pet still alerts");
-        eq("Unpriced", alerts.current(now + 9200).valueText(), "Unknown value is not displayed as zero profit");
+        eq(
+                "Unpriced",
+                alerts.current(now + 9200).valueText(),
+                "Unknown value is not displayed as zero profit");
         alerts.clear();
         eq(0, alerts.queued(), "Context reset empties queue");
         alerts.notice("ARACHNE_FANG", 1, Double.NaN, now);
@@ -79,18 +99,29 @@ public final class RngAlertsChecks {
         alerts.notice("ARACHNE_FANG", 1, -1, now);
         eq("Unpriced", alerts.current(now + 200).valueText(), "Negative price safe");
         alerts.clear();
-        for (int i = 0; i < 8; i++) yes(alerts.notice("ARACHNE_FANG", 1, 1, now), "Bounded queue accepts reward " + i);
+        for (int i = 0; i < 8; i++) {
+            yes(alerts.notice("ARACHNE_FANG", 1, 1, now), "Bounded queue accepts reward " + i);
+        }
         yes(!alerts.notice("ARACHNE_FANG", 1, 1, now), "Queue protects against unbounded titles");
         eq(8, alerts.queued(), "Queue bound preserved");
 
         alerts.clear();
         alerts.notice("TARANTULA_LEGENDARY", 1, 5_000_000, now);
         alerts.setVisible(false, now + 500);
-        eq("TARANTULA_LEGENDARY", alerts.current(now + 20_000).item(), "An open menu cannot expire an unseen title");
-        yes(alerts.current(now + 20_000).alpha() == 1, "A hidden title keeps its visible fade position");
+        eq(
+                "TARANTULA_LEGENDARY",
+                alerts.current(now + 20_000).item(),
+                "An open menu cannot expire an unseen title");
+        yes(
+                alerts.current(now + 20_000).alpha() == 1,
+                "A hidden title keeps its visible fade position");
         alerts.setVisible(true, now + 20_000);
-        yes(alerts.current(now + 23_499) != null, "Already-visible time remains part of the four-second lifetime");
-        yes(alerts.current(now + 23_500) == null, "Title expires after four actual visible seconds");
+        yes(
+                alerts.current(now + 23_499) != null,
+                "Already-visible time remains part of the four-second lifetime");
+        yes(
+                alerts.current(now + 23_500) == null,
+                "Title expires after four actual visible seconds");
 
         alerts.clear();
         alerts.setVisible(false, now);
@@ -98,15 +129,26 @@ public final class RngAlertsChecks {
         alerts.notice("ARACHNE_FANG", 1, 100, now + 2_000);
         alerts.setVisible(false, now + 10_000);
         alerts.setVisible(true, now + 20_000);
-        eq("TARANTULA_EPIC", alerts.current(now + 20_200).item(), "A reward arriving in a menu starts when gameplay returns");
+        eq(
+                "TARANTULA_EPIC",
+                alerts.current(now + 20_200).item(),
+                "A reward arriving in a menu starts when gameplay returns");
         eq(2, alerts.queued(), "Hidden rewards keep their sequential queue");
-        eq("ARACHNE_FANG", alerts.current(now + 24_200).item(), "Second hidden reward gets its own four-second slot");
-        yes(alerts.current(now + 28_000) == null, "Both deferred titles expire after their visible slots");
+        eq(
+                "ARACHNE_FANG",
+                alerts.current(now + 24_200).item(),
+                "Second hidden reward gets its own four-second slot");
+        yes(
+                alerts.current(now + 28_000) == null,
+                "Both deferred titles expire after their visible slots");
         alerts.setVisible(false, now + 30_000);
         alerts.clear();
         alerts.notice("ARACHNE_FANG", 1, 100, now + 31_000);
-        yes(alerts.current(now + 35_000) == null, "Context clear resets the deferred clock as well as the queue");
+        yes(
+                alerts.current(now + 35_000) == null,
+                "Context clear resets the deferred clock as well as the queue");
         System.out.println("PASS: " + checks + " rare-drop title and pet-label checks.");
     }
+
     private RngAlertsChecks() {}
 }

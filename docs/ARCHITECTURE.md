@@ -4,6 +4,20 @@ Arachne Ledger uses one journal for all financial values. Minecraft adapters obs
 
 All Java classes below are in `dev.arachneledger`, apart from the `mixin` subpackage.
 
+## Reading the code
+
+Start with a single event and follow its path:
+
+1. `ArachneLedger.tick` shows the client loop: prepare context, advance tracking, apply prices/titles, observe labels, publish summaries, then handle keys and requested screens. `receive` is the server-chat entry point; `PickupMixin` is the local pickup entry point.
+2. `Messages`, `LootLabels`, and `PetDrops` translate server text into domain inputs. They parse without writing money or choosing a fight.
+3. `Tracker.message` handles lifecycle decisions in server-event order. Its named helpers make spawn confirmation, death, damage qualification, summon ownership, and personal pet receipts separate steps. Reward observers share the accepted-loot path after deduplication.
+4. `Ledger.add` records a receipt. `LedgerTotals` turns selected receipts into fight/session totals; `Analytics` and `GraphData` derive rates and graph series. Display code never maintains another profit counter.
+5. `DashboardScreen`, `Hud`, and `Graph` organize rendering into named layout and drawing steps. Start with their top-level `init`, `render`, or `draw` method, then follow only the helper for the feature you are changing.
+
+The saved models intentionally retain their existing field names. `Config.validate` separates manual-value validation, legacy defaults, automatic-price validation, and HUD normalization. `Ledger.validate` separates history checks, stable-ID migration, journal validation, and cache reset. Read those stages before changing the save format.
+
+Build logic is separated too: `build.gradle` declares compilation and regression suites, `gradle/java-format.gradle` owns formatting, and `gradle/release.gradle` owns archives and release metadata checks. Use `formatJava` to apply the style and `checkJavaFormat` to verify it.
+
 ## Responsibilities
 
 | Component | Responsibility and boundary |
@@ -19,6 +33,7 @@ All Java classes below are in `dev.arachneledger`, apart from the `mixin` subpac
 | `LootDeduplicator` | Keeps observed stand UUIDs and short-lived item quantity balances. Returns newly observed units after split/stacked counterpart reconciliation. Pets retain cumulative stand/pickup/claim coverage for the whole reward window; this class does not parse labels, choose fights, value items, or write the journal. |
 | `PurseCoins` | Parses purse/gain snapshots and pairs marked gains with positive balance deltas. Returns accepted coin amounts, with baselines and a short delayed-annotation allowance; it does not decide farming/menu eligibility or write entries. |
 | `Ledger`, `FightRecord` | Persist journal entries and fight metadata. Calculate scope totals, fight breakdowns, values, graphs, and corrections from those entries. |
+| `LedgerTotals` | Temporary accumulator shared by fight and session totals. Includes each receipt once, keeps Scavenger as a revenue subtotal, and returns immutable display results. It owns no saved state. |
 | `Analytics` | Calculates observed active-time pace, averages, and the rolling current-session projection. It does not estimate unseen drops. |
 | `GraphPreferences`, `GraphData`, `GraphOptionsScreen` | GraphPreferences stores shared graph dashboard/HUD series and text choices. GraphData derives immutable actual/projection snapshots and known-spawn markers from recorded entries and fights. GraphOptionsScreen edits display preferences without changing accounting. |
 | `Config`, `Store` | Validate settings and saved data, select effective valuations, migrate older fields, and write JSON with a backup and atomic replacement where supported. |

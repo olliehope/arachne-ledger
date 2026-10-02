@@ -1,16 +1,28 @@
 package dev.arachneledger;
+
 import java.util.Locale;
+
+/** Locale-stable display formatting shared by chat, screens, and the HUD. */
 public final class Format {
-    public static String coins(double n) {
-        double a = Math.abs(n);
-        if (a >= 1_000_000_000) return String.format(Locale.ROOT, "%.2fb", n / 1_000_000_000);
-        if (a >= 1_000_000) return String.format(Locale.ROOT, "%.2fm", n / 1_000_000);
-        if (a >= 1000) return String.format(Locale.ROOT, "%.1fk", n / 1000);
-        return String.format(Locale.ROOT, "%,.0f", n);
+    public static String coins(double value) {
+        double magnitude = Math.abs(value);
+        if (magnitude >= 1_000_000_000) {
+            return String.format(Locale.ROOT, "%.2fb", value / 1_000_000_000);
+        }
+        if (magnitude >= 1_000_000) {
+            return String.format(Locale.ROOT, "%.2fm", value / 1_000_000);
+        }
+        if (magnitude >= 1000) {
+            return String.format(Locale.ROOT, "%.1fk", value / 1000);
+        }
+        return String.format(Locale.ROOT, "%,.0f", value);
     }
+
     public static String time(long millis) {
-        long s = millis / 1000;
-        return String.format(Locale.ROOT, "%02d:%02d:%02d", s/3600, s/60%60, s%60);
+        long seconds = millis / 1000;
+        return String.format(
+                Locale.ROOT, "%02d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60);
     }
+
     private Format() {}
 }

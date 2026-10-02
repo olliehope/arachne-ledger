@@ -3,16 +3,22 @@ package dev.arachneledger;
 /** Captured Arachne hologram labels and close variants. */
 public final class LootLabelsChecks {
     private static int checks;
+
     private static void drop(String raw, String item, int count) {
         checks++;
         var found = LootLabels.parse(raw);
-        if (found == null || !found.item().equals(item) || found.count() != count)
+        if (found == null || !found.item().equals(item) || found.count() != count) {
             throw new AssertionError(raw + " expected " + item + " x" + count + ", got " + found);
+        }
     }
+
     private static void absent(String raw) {
         checks++;
-        if (LootLabels.parse(raw) != null) throw new AssertionError("Not a drop: " + raw);
+        if (LootLabels.parse(raw) != null) {
+            throw new AssertionError("Not a drop: " + raw);
+        }
     }
+
     public static void main(String[] args) {
         drop("§aEnchanted String", "ENCHANTED_STRING", 1);
         drop("§dSpider Essence §8x8", "ESSENCE_SPIDER", 8);
