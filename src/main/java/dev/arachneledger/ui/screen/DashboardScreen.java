@@ -203,6 +203,16 @@ public final class DashboardScreen extends Screen {
                     false,
                     "Choose graph lines, text and spawn markers.",
                     () -> minecraft.setScreen(new GraphOptionsScreen(this)));
+        } else {
+            button(
+                    panelX + panelWidth - 60,
+                    panelY + 36,
+                    52,
+                    18,
+                    "Journal",
+                    false,
+                    "Achievements, session recaps, personal records and tracking diagnostics.",
+                    () -> minecraft.setScreen(new JournalScreen(this)));
         }
     }
 

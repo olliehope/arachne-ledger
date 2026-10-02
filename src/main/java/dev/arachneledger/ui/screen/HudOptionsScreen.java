@@ -2,6 +2,7 @@ package dev.arachneledger.ui.screen;
 
 import dev.arachneledger.config.Config;
 import dev.arachneledger.config.HudPreferences;
+import dev.arachneledger.config.HudRowOrder;
 import dev.arachneledger.skyblock.Catalog;
 import dev.arachneledger.ui.FlatButton;
 
@@ -20,14 +21,15 @@ public final class HudOptionsScreen extends SettingsListScreen {
 
     @Override
     protected void addHeaderControls() {
-        String[] labels = {"Rows", "Items", "Display"};
+        String[] labels = {"Rows", "Items", "Display", "Order"};
+        int tabWidth = Math.min(58, (panelWidth - 96) / labels.length);
         for (int index = 0; index < labels.length; index++) {
             int tab = index;
             addRenderableWidget(
                     new FlatButton(
-                            panelX + 16 + index * 62,
+                            panelX + 16 + index * (tabWidth + 3),
                             panelY + 43,
-                            58,
+                            tabWidth,
                             18,
                             labels[index],
                             selectedTab == index,
@@ -44,6 +46,7 @@ public final class HudOptionsScreen extends SettingsListScreen {
         return switch (selectedTab) {
             case 1 -> itemOptions();
             case 2 -> displayOptions();
+            case 3 -> orderOptions();
             default -> rowOptions();
         };
     }
@@ -71,6 +74,16 @@ public final class HudOptionsScreen extends SettingsListScreen {
                         preferences.showProjectedPerHour,
                         "The current session's recent net-profit pace. Needs enough active time and a recent kill.",
                         () -> preferences.showProjectedPerHour = !preferences.showProjectedPerHour),
+                toggle(
+                        "Profit without RNG",
+                        preferences.showRegularProfit,
+                        "Net profit excluding Tarantula Pets and Arachne Fangs. Scavenger income and all recorded costs are kept.",
+                        () -> preferences.showRegularProfit = !preferences.showRegularProfit),
+                toggle(
+                        "Without RNG / hour",
+                        preferences.showRegularPerHour,
+                        "Net profit per active hour excluding Tarantula Pets and Arachne Fangs.",
+                        () -> preferences.showRegularPerHour = !preferences.showRegularPerHour),
                 toggle(
                         "Tracking status",
                         preferences.showStatus,
@@ -121,6 +134,54 @@ public final class HudOptionsScreen extends SettingsListScreen {
                         preferences.showUnpricedWarning,
                         "Show how many recorded drops have no saved value.",
                         () -> preferences.showUnpricedWarning = !preferences.showUnpricedWarning));
+    }
+
+    private List<Option> orderOptions() {
+        HudPreferences preferences = tracker.config.hudPreferences;
+        List<Option> rows = new ArrayList<>();
+        rows.add(
+                new Option(
+                        "Reset row order",
+                        "Reset",
+                        false,
+                        tracker.error.isEmpty(),
+                        "Restore the default stat order. Row visibility, loot sorting and item filters are kept.",
+                        () -> {
+                            preferences.rowOrder = HudRowOrder.defaultOrder();
+                            changed();
+                        }));
+        for (HudRowOrder.Group group : HudRowOrder.Group.values()) {
+            for (HudRowOrder.Definition row : HudRowOrder.rows(preferences.rowOrder, group)) {
+                String tip =
+                        row.label()
+                                + ": reorder within "
+                                + group.label().toLowerCase(java.util.Locale.ROOT)
+                                + ". Split keeps rewards on the left and summary on the right. Hidden rows keep their order; loot moves as one block.";
+                rows.add(
+                        new Option(
+                                group.label() + ": " + row.label(),
+                                "Up",
+                                false,
+                                tracker.error.isEmpty()
+                                        && HudRowOrder.canMove(preferences.rowOrder, row.id(), -1),
+                                "Move up. " + tip,
+                                () -> moveRow(row.id(), -1),
+                                new AdditionalAction(
+                                        "Down",
+                                        tracker.error.isEmpty()
+                                                && HudRowOrder.canMove(
+                                                        preferences.rowOrder, row.id(), 1),
+                                        "Move down. " + tip,
+                                        () -> moveRow(row.id(), 1))));
+            }
+        }
+        return rows;
+    }
+
+    private void moveRow(String id, int direction) {
+        HudPreferences preferences = tracker.config.hudPreferences;
+        preferences.rowOrder = HudRowOrder.move(preferences.rowOrder, id, direction);
+        changed();
     }
 
     private List<Option> itemOptions() {
@@ -235,7 +296,7 @@ public final class HudOptionsScreen extends SettingsListScreen {
                             tracker.error.isEmpty(),
                             "Apply "
                                     + preset.label()
-                                    + ": resets row toggles, item filters, sorting and the loot-row limit. Position and scale are kept.",
+                                    + ": resets row toggles, row order, item filters, sorting and the loot-row limit. Position and scale are kept.",
                             () -> {
                                 preferences.applyPreset(preset);
                                 tracker.config.hudView = Config.View.DETAILED;

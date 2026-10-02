@@ -1,10 +1,17 @@
 package dev.arachneledger.tracking;
 
+import static dev.arachneledger.diagnostics.TrackingDiagnostics.Kind.*;
+import static dev.arachneledger.diagnostics.TrackingDiagnostics.Result.*;
+
+import dev.arachneledger.achievement.Achievements;
 import dev.arachneledger.config.Config;
 import dev.arachneledger.config.HudPreferences;
 import dev.arachneledger.config.Store;
-import dev.arachneledger.ledger.FightRecord;
+import dev.arachneledger.diagnostics.DetectionSnapshot;
+import dev.arachneledger.diagnostics.TrackingDiagnostics;
 import dev.arachneledger.ledger.Ledger;
+import dev.arachneledger.ledger.LedgerCsv;
+import dev.arachneledger.ledger.SessionSummary;
 import dev.arachneledger.skyblock.Catalog;
 import dev.arachneledger.skyblock.LootLabels;
 import dev.arachneledger.skyblock.Messages;
@@ -15,15 +22,10 @@ import dev.arachneledger.ui.RngAlerts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedWriter;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Instant;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Deque;
-import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
 
@@ -34,18 +36,11 @@ import java.util.UUID;
 public final class Tracker {
     private static final Logger LOG = LoggerFactory.getLogger("ArachneLedger");
 
-    public static final long AFK_GRACE_MILLIS = 60_000;
-    private static final long SUMMONING_TIMEOUT_MILLIS = 60_000;
+    public static final long AFK_GRACE_MILLIS = TrackingClock.AFK_GRACE_MILLIS;
     private static final long PICKUP_WINDOW_MILLIS = 300_000;
     private static final long REWARD_WINDOW_MILLIS = 45_000;
-    private static final long DAMAGE_SUMMARY_WINDOW_MILLIS = 5_000;
-    private static final long MAX_TICK_GAP_MILLIS = 5_000;
     private static final long AUTOSAVE_INTERVAL_MILLIS = 10_000;
     private static final long PLACEMENT_DUPLICATE_WINDOW_MILLIS = 2_000;
-    private static final long REPORT_DELAY_AFTER_DEATH_MILLIS = 3_000;
-    private static final long REPORT_DELAY_AFTER_DAMAGE_MILLIS = 1_000;
-    private static final long REPORT_REWARD_QUIET_MILLIS = 750;
-    private static final long MAX_REPORT_DELAY_MILLIS = 10_000;
     private static final long PURSE_MENU_COOLDOWN_MILLIS = 2_000;
     private static final long SCAVENGER_POST_DEATH_WINDOW_MILLIS = 10_000;
 
@@ -64,44 +59,25 @@ public final class Tracker {
     private boolean storageBlocked;
     private boolean ledgerDirty;
     private boolean pausedLastTick;
-    private long lastTickAt;
     private long lastSaveAt;
 
     private final TrackingArea area = new TrackingArea();
-    private long activeGraceUntil;
-    private long summoningUntil;
     private long pickupWindowUntil;
     private long rewardWindowUntil;
-    private long awaitingDamageSince;
-    private long lastDeathAt;
     private long lastPlacementAt;
     private String lastPlacementMessage = "";
 
-    // Summon entries retain stable ledger IDs until the next actual or recovered spawn.
-    private final List<Long> pendingSummonEntryIds = new ArrayList<>();
-    private TrackedFight activeFight;
-    private TrackedFight rewardFight;
-    private TrackedFight awaitingDamageFight;
-    private final Deque<TrackedFight> pendingKillReports = new ArrayDeque<>();
-    private final Deque<KillSummary> readyKillSummaries = new ArrayDeque<>();
+    private final FightReports reports = new FightReports();
+    private final TrackingClock clock = new TrackingClock();
+    public final TrackingDiagnostics diagnostics = new TrackingDiagnostics();
+    private final FightLifecycle fights = new FightLifecycle(clock, reports, diagnostics);
     private final LootDeduplicator lootDeduplicator = new LootDeduplicator();
     private final PurseCoins purseCoins = new PurseCoins();
+    private long achievementRevision = -1;
+    private final Deque<Achievements.Unlock> achievementNotices = new ArrayDeque<>();
+    private final Deque<SessionSummary.Snapshot> sessionNotices = new ArrayDeque<>();
     private long purseMenuCooldownUntil;
     private boolean purseMenuOpen;
-
-    /** Runtime receipt/report timing; persistent outcomes live in the referenced FightRecord. */
-    private static final class TrackedFight {
-        final FightRecord history;
-        long deathAt;
-        long damage;
-        long lastRewardAt;
-        long reportAfterAt;
-        long sessionKillNumber;
-
-        TrackedFight(FightRecord history) {
-            this.history = history;
-        }
-    }
 
     public record KillSummary(
             long fightMillis,
@@ -142,7 +118,9 @@ public final class Tracker {
     }
 
     private void fail(Exception exception) {
-        error = exception.getMessage();
+        error = exception.getMessage() == null ? exception.toString() : exception.getMessage();
+        diagnostics.record(
+                System.currentTimeMillis(), STORAGE, IGNORED, "Persistence failed", error);
         storageBlocked = true;
         LOG.error("Arachne Ledger persistence error", exception);
     }
@@ -186,6 +164,10 @@ public final class Tracker {
         } catch (IOException exception) {
             fail(exception);
         }
+        achievementRevision = -1;
+        achievementNotices.clear();
+        sessionNotices.clear();
+        refreshAchievements(System.currentTimeMillis(), false);
         resetContext();
         if (ledger.closeOpenFights()) {
             ledgerDirty = true;
@@ -195,6 +177,12 @@ public final class Tracker {
 
     /** A world/account change clears both temporary eligibility and observed entity identities. */
     public void resetContext() {
+        diagnostics.record(
+                System.currentTimeMillis(),
+                LOCATION,
+                INFO,
+                "Context reset",
+                "World or account context changed");
         clearFightContext();
         lastPlacementAt = 0;
         lastPlacementMessage = "";
@@ -208,37 +196,16 @@ public final class Tracker {
     }
 
     private void clearFightContext() {
-        finishInterruptedFights();
-        lastTickAt = 0;
+        fights.interrupt(ledger);
+        clock.reset();
         pickupWindowUntil = 0;
         rewardWindowUntil = 0;
-        awaitingDamageSince = 0;
-        lastDeathAt = 0;
-        activeGraceUntil = 0;
-        summoningUntil = 0;
         purseCoins.reset();
         purseMenuCooldownUntil = 0;
         purseMenuOpen = false;
-        pendingSummonEntryIds.clear();
-        activeFight = null;
-        rewardFight = null;
-        awaitingDamageFight = null;
-        pendingKillReports.clear();
-        readyKillSummaries.clear();
+        fights.clearRuntime();
+        reports.clear();
         rng.clear();
-    }
-
-    private void finishInterruptedFights() {
-        if (activeFight != null) {
-            activeFight.history.outcome = FightRecord.Outcome.INTERRUPTED;
-            activeFight.history.activeEnd = ledger.activeMillis;
-            ledgerDirty = true;
-        }
-        if (awaitingDamageFight != null
-                && awaitingDamageFight.history.outcome == FightRecord.Outcome.WAITING_DAMAGE) {
-            awaitingDamageFight.history.outcome = FightRecord.Outcome.MISSING_DAMAGE;
-            ledgerDirty = true;
-        }
     }
 
     public void updateLocation(
@@ -248,6 +215,9 @@ public final class Tracker {
             String location,
             String reason,
             long now) {
+        if (this.inSkyblock != skyBlock || !this.location.equals(location)) {
+            diagnostics.record(now, LOCATION, INFO, location, reason);
+        }
         area.update(onHypixel, skyBlock, sanctuary, location, reason);
         this.location = area.location();
         refreshArea(now);
@@ -273,8 +243,10 @@ public final class Tracker {
         inArena = insideArena;
         advanceClock(now, insideArena);
         handlePauseTransition();
-        expireDamageSummary(now);
+        fights.expireDamageSummary(now);
+        ledgerDirty |= fights.consumeChanges();
         flushReports(now);
+        if (refreshAchievements(now, config.achievementNotifications)) save();
         savePeriodically(now);
     }
 
@@ -286,16 +258,6 @@ public final class Tracker {
         pausedLastTick = config.paused;
     }
 
-    private void expireDamageSummary(long now) {
-        if (awaitingDamageFight != null
-                && now - awaitingDamageSince > DAMAGE_SUMMARY_WINDOW_MILLIS) {
-            awaitingDamageFight.history.outcome = FightRecord.Outcome.MISSING_DAMAGE;
-            awaitingDamageFight = null;
-            awaitingDamageSince = 0;
-            ledgerDirty = true;
-        }
-    }
-
     private void savePeriodically(long now) {
         if (now - lastSaveAt > AUTOSAVE_INTERVAL_MILLIS) {
             save();
@@ -304,40 +266,26 @@ public final class Tracker {
     }
 
     private void advanceClock(long now, boolean insideArena) {
-        if (ready()
-                && !config.paused
-                && insideArena
-                && lastTickAt > 0
-                && now > lastTickAt
-                && now - lastTickAt <= MAX_TICK_GAP_MILLIS) {
-            long activeEnd = activeFight != null ? now : Math.min(now, activeGraceUntil);
-            if (activeEnd > lastTickAt) {
-                ledger.tick(activeEnd - lastTickAt);
-                ledgerDirty = true;
-            }
-        }
-        lastTickAt = insideArena && !config.paused ? now : 0;
+        ledgerDirty |=
+                clock.advance(
+                        ledger,
+                        ready(),
+                        config.paused,
+                        insideArena,
+                        fights.activeFight != null,
+                        now);
     }
 
     public boolean isSummoning() {
-        return inArena && !config.paused && activeFight == null && summoningUntil > lastTickAt;
+        return clock.summoning(inArena, config.paused, fights.activeFight != null);
     }
 
     public boolean isAfk() {
-        return inArena
-                && !config.paused
-                && activeFight == null
-                && !isSummoning()
-                && activeGraceUntil > 0
-                && lastTickAt >= activeGraceUntil;
+        return clock.afk(inArena, config.paused, fights.activeFight != null);
     }
 
     public boolean waitingForSpawn() {
-        return inArena
-                && !config.paused
-                && activeFight == null
-                && !isSummoning()
-                && activeGraceUntil == 0;
+        return clock.waiting(inArena, config.paused, fights.activeFight != null);
     }
 
     public String timerState() {
@@ -356,7 +304,7 @@ public final class Tracker {
         if (waitingForSpawn()) {
             return "Waiting for spawn";
         }
-        return activeFight != null ? "Fighting" : "Between fights";
+        return fights.activeFight != null ? "Fighting" : "Between fights";
     }
 
     public String status() {
@@ -383,12 +331,21 @@ public final class Tracker {
 
     /** Process server observations in order: eligibility, boss lifecycle, damage, then rewards. */
     public void message(String rawMessage, String playerName, long now) {
+        String message = Messages.clean(rawMessage);
+        boolean relevant = Messages.isArachneCue(message) || Messages.damage(message).isPresent();
         if (!ready() || config.paused) {
+            if (relevant)
+                diagnostics.record(
+                        now,
+                        SPAWN,
+                        IGNORED,
+                        message,
+                        !ready() ? "Ledger not ready" : "Tracking paused");
             return;
         }
-        String message = Messages.clean(rawMessage);
         observeLocationCue(message, now);
         if (!inArena) {
+            if (relevant) diagnostics.record(now, SPAWN, IGNORED, message, detectionReason);
             return;
         }
         advanceClock(now, true);
@@ -396,13 +353,23 @@ public final class Tracker {
 
         Messages.Event event = Messages.parse(message, playerName);
         switch (event) {
-            case SPAWN, ACTIVITY -> observeBossActivity(event, now);
-            case DOWN -> observeBossDeath(now);
+            case SPAWN, ACTIVITY -> {
+                fights.observeBossActivity(ledger, config, event, now);
+                if (fights.activeFight != null) pickupWindowUntil = now + PICKUP_WINDOW_MILLIS;
+            }
+            case DOWN -> {
+                if (fights.observeBossDeath(ledger, config, now)) {
+                    pickupWindowUntil = now + REWARD_WINDOW_MILLIS;
+                    rewardWindowUntil = now + REWARD_WINDOW_MILLIS;
+                    lootDeduplicator.beginRewardWindow();
+                }
+            }
             default -> {
                 // Summon costs and personal receipts are handled after damage qualification.
             }
         }
-        observeDamageSummary(message, now);
+        fights.observeDamageSummary(ledger, message, now);
+        ledgerDirty |= fights.consumeChanges();
         if ((event == Messages.Event.CRYSTAL || event == Messages.Event.CALLING)
                 && !recordOwnPlacement(event, message, now)) {
             return;
@@ -419,100 +386,22 @@ public final class Tracker {
 
     private void observeSummoningCue(String message, long now) {
         // Everyone's completed summon can awaken the boss; only own placements are charged.
-        if (Messages.isSummoning(message) && activeFight == null) {
-            summoningUntil = now + SUMMONING_TIMEOUT_MILLIS;
+        if (Messages.isSummoning(message) && fights.activeFight == null) {
+            clock.summon(now);
+            diagnostics.record(
+                    now,
+                    SUMMON,
+                    INFO,
+                    message,
+                    "Awakening detected; only your own placements incur a cost");
         }
-    }
-
-    private void observeBossActivity(Messages.Event event, long now) {
-        boolean confirmedSpawn = event == Messages.Event.SPAWN;
-        // Generic activity can recover a missed welcome. After a death it needs a fresh summon
-        // cue, so old dialogue cannot restart the fight or extend the AFK grace.
-        if (activeFight == null
-                && (confirmedSpawn || activeGraceUntil == 0 || now < summoningUntil)) {
-            activeFight = beginFight(confirmedSpawn ? now : 0);
-            activeGraceUntil = 0;
-            summoningUntil = 0;
-        } else if (activeFight != null && confirmedSpawn) {
-            // A Crystal ritual may emit activity before its welcome. Confirm the existing fight
-            // rather than losing its spawn marker or creating a second fight.
-            if (ledger.confirmFightSpawn(activeFight.history.id, now)) {
-                ledgerDirty = true;
-            }
-        }
-        if (activeFight != null) {
-            pickupWindowUntil = now + PICKUP_WINDOW_MILLIS;
-        }
-    }
-
-    private void observeBossDeath(long now) {
-        // A relayed results block cannot become another death without an intervening fight.
-        if (lastDeathAt != 0 && activeFight == null) {
-            return;
-        }
-        lastDeathAt = now;
-        summoningUntil = 0;
-        if (awaitingDamageFight != null
-                && awaitingDamageFight.history.outcome == FightRecord.Outcome.WAITING_DAMAGE) {
-            awaitingDamageFight.history.outcome = FightRecord.Outcome.MISSING_DAMAGE;
-        }
-        rewardFight = activeFight != null ? activeFight : beginFight(0);
-        rewardFight.deathAt = now;
-        awaitingDamageFight = rewardFight;
-        activeFight = null;
-
-        FightRecord history = rewardFight.history;
-        history.died = now;
-        history.activeEnd = ledger.activeMillis;
-        history.minimumDamage = Math.max(1, config.minimumDamage);
-        history.outcome = FightRecord.Outcome.WAITING_DAMAGE;
-        ledgerDirty = true;
-
-        activeGraceUntil = now + AFK_GRACE_MILLIS;
-        awaitingDamageSince = now;
-        pickupWindowUntil = now + REWARD_WINDOW_MILLIS;
-        rewardWindowUntil = now + REWARD_WINDOW_MILLIS;
-        lootDeduplicator.beginRewardWindow();
-    }
-
-    private void observeDamageSummary(String message, long now) {
-        var damage = Messages.damage(message);
-        if (awaitingDamageSince <= 0
-                || now < awaitingDamageSince
-                || now - awaitingDamageSince > DAMAGE_SUMMARY_WINDOW_MILLIS
-                || damage.isEmpty()) {
-            return;
-        }
-        long dealtDamage = damage.getAsLong();
-        awaitingDamageFight.damage = dealtDamage;
-        awaitingDamageFight.history.damage = dealtDamage;
-        ledgerDirty = true;
-        if (dealtDamage >= awaitingDamageFight.history.minimumDamage) {
-            countQualifiedKill(awaitingDamageFight, now);
-        } else if (dealtDamage == 0) {
-            awaitingDamageFight.history.outcome = FightRecord.Outcome.ZERO_DAMAGE;
-        } else {
-            awaitingDamageFight.history.outcome = FightRecord.Outcome.LOW_DAMAGE;
-        }
-        awaitingDamageSince = 0;
-        awaitingDamageFight = null;
-    }
-
-    private void countQualifiedKill(TrackedFight completed, long now) {
-        completed.history.outcome = FightRecord.Outcome.COUNTED;
-        record(Ledger.Kind.KILL, "ARACHNE", 1, 0, "server", now, completed.history.id);
-        completed.sessionKillNumber = ledger.stats(false).kills();
-        completed.reportAfterAt =
-                Math.max(
-                        completed.deathAt + REPORT_DELAY_AFTER_DEATH_MILLIS,
-                        now + REPORT_DELAY_AFTER_DAMAGE_MILLIS);
-        pendingKillReports.addLast(completed);
     }
 
     /** Return false for a duplicate relay of the same own-placement message. */
     private boolean recordOwnPlacement(Messages.Event event, String message, long now) {
         if (message.equals(lastPlacementMessage)
                 && now - lastPlacementAt < PLACEMENT_DUPLICATE_WINDOW_MILLIS) {
+            diagnostics.record(now, SUMMON, IGNORED, message, "Duplicate own-placement relay");
             return false;
         }
         lastPlacementAt = now;
@@ -526,7 +415,13 @@ public final class Tracker {
                         crystal ? config.effectiveCrystalCost() : config.callingCost,
                         "server",
                         now);
-        pendingSummonEntryIds.add(placement.id());
+        fights.pendingSummonEntryIds.add(placement.id());
+        diagnostics.record(
+                now,
+                SUMMON,
+                ACCEPTED,
+                crystal ? "Your Crystal" : "Your Calling",
+                "Own placement cost recorded");
         pickupWindowUntil = now + PICKUP_WINDOW_MILLIS;
         return true;
     }
@@ -539,54 +434,15 @@ public final class Tracker {
         if (drop == null || !lootDeduplicator.acceptClaim(drop.item(), drop.count(), now)) {
             return;
         }
-        recordAcceptedLoot(drop.item(), drop.count(), "pet_claim", now, rewardFight);
-    }
-
-    private TrackedFight beginFight(long spawnedAt) {
-        FightRecord history = ledger.beginFight(spawnedAt, Math.max(1, config.minimumDamage));
-        ledger.associateSummons(pendingSummonEntryIds, history.id);
-        pendingSummonEntryIds.clear();
-        ledgerDirty = true;
-        return new TrackedFight(history);
+        recordAcceptedLoot(drop.item(), drop.count(), "pet_claim", now, fights.rewardFight);
     }
 
     private void flushReports(long now) {
-        for (Iterator<TrackedFight> iterator = pendingKillReports.iterator();
-                iterator.hasNext(); ) {
-            TrackedFight completed = iterator.next();
-            if (!reportReady(completed, now)) {
-                continue;
-            }
-            queueKillSummary(completed);
-            iterator.remove();
-        }
-    }
-
-    private static boolean reportReady(TrackedFight completed, long now) {
-        boolean rewardsQuiet = now - completed.lastRewardAt >= REPORT_REWARD_QUIET_MILLIS;
-        boolean maximumWaitReached = now - completed.deathAt >= MAX_REPORT_DELAY_MILLIS;
-        return now >= completed.reportAfterAt && (rewardsQuiet || maximumWaitReached);
-    }
-
-    private void queueKillSummary(TrackedFight completed) {
-        Ledger.Stats stats = ledger.fightStats(completed.history.id);
-        if (config.killChat && stats.kills() > 0) {
-            readyKillSummaries.addLast(
-                    new KillSummary(
-                            completed.history.duration(),
-                            completed.damage,
-                            stats.revenue(),
-                            stats.costs(),
-                            stats.unpriced(),
-                            completed.sessionKillNumber,
-                            ledger.fightScavengerCoins(completed.history.id)));
-        }
+        reports.flush(ledger, config.killChat, now);
     }
 
     public List<KillSummary> drainKillSummaries() {
-        List<KillSummary> summaries = List.copyOf(readyKillSummaries);
-        readyKillSummaries.clear();
-        return summaries;
+        return reports.drain();
     }
 
     /** Observe every tick, even when a short-lived menu falls between sidebar snapshots. */
@@ -607,7 +463,7 @@ public final class Tracker {
         if (coins <= 0) {
             return;
         }
-        TrackedFight target = activeFight != null ? activeFight : rewardFight;
+        TrackedFight target = fights.activeFight != null ? fights.activeFight : fights.rewardFight;
         record(
                 Ledger.Kind.INCOME,
                 PurseCoins.ITEM,
@@ -617,20 +473,22 @@ public final class Tracker {
                 now,
                 target == null ? 0 : target.history.id);
         noteReward(target, now);
+        diagnostics.record(
+                now, SCAVENGER, ACCEPTED, Double.toString(coins), "Eligible yellow purse gain");
     }
 
     private boolean scavengerEligible(boolean menuOpen, long now) {
         boolean recentDeath =
-                rewardFight != null
-                        && now >= rewardFight.deathAt
-                        && now - rewardFight.deathAt <= SCAVENGER_POST_DEATH_WINDOW_MILLIS;
+                fights.rewardFight != null
+                        && now >= fights.rewardFight.deathAt
+                        && now - fights.rewardFight.deathAt <= SCAVENGER_POST_DEATH_WINDOW_MILLIS;
         return ready()
                 && config.scavengerCoins
                 && !config.paused
                 && inArena
                 && !menuOpen
                 && now >= purseMenuCooldownUntil
-                && (activeFight != null || recentDeath);
+                && (fights.activeFight != null || recentDeath);
     }
 
     public boolean acceptsLoot(long now) {
@@ -647,11 +505,41 @@ public final class Tracker {
 
     /** UUIDs make repeated scans and server metadata updates count a hologram only once. */
     public void observeLootStand(UUID standId, String label, long now) {
-        if (!acceptsStandLoot(now) || lootDeduplicator.hasSeenStand(standId)) {
+        if (!acceptsStandLoot(now)) {
+            if (LootLabels.parse(label) != null)
+                diagnostics.once(
+                        "closed:" + standId,
+                        now,
+                        LOOT,
+                        IGNORED,
+                        label,
+                        "Drop-label reward window closed");
+            return;
+        }
+        if (lootDeduplicator.hasSeenStand(standId)) {
+            diagnostics.once(
+                    "duplicate:" + standId,
+                    now,
+                    LOOT,
+                    IGNORED,
+                    label,
+                    "Name tag already recorded or reconciled");
             return;
         }
         LootLabels.Drop drop = LootLabels.parse(label);
         if (drop == null) {
+            String candidate = Messages.clean(label).toLowerCase(java.util.Locale.ROOT);
+            if (candidate.contains("arachne")
+                    || candidate.contains("tarantula")
+                    || candidate.contains("pet")) {
+                diagnostics.once(
+                        "unknown:" + standId,
+                        now,
+                        LOOT,
+                        IGNORED,
+                        label,
+                        "Unrecognized reward label");
+            }
             return;
         }
         long unseenQuantity =
@@ -659,11 +547,18 @@ public final class Tracker {
         if (unseenQuantity == 0) {
             return;
         }
-        recordAcceptedLoot(drop.item(), unseenQuantity, "armor_stand", now, rewardFight);
+        recordAcceptedLoot(drop.item(), unseenQuantity, "armor_stand", now, fights.rewardFight);
     }
 
     public void pickup(String itemId, int quantity, long now) {
-        if (!acceptsLoot(now) || !Catalog.ITEMS.containsKey(itemId) || quantity <= 0) {
+        if (!Catalog.ITEMS.containsKey(itemId) || quantity <= 0) return;
+        if (!acceptsLoot(now)) {
+            diagnostics.record(
+                    now,
+                    LOOT,
+                    IGNORED,
+                    itemId + " x" + quantity,
+                    "Pickup window closed or tracking disabled");
             return;
         }
         boolean rewardWindowOpen = acceptsStandLoot(now);
@@ -674,7 +569,7 @@ public final class Tracker {
         }
         // A new spawn may precede the old rewards disappearing. Those receipts still belong
         // to the previous death; ordinary mid-fight pickups belong to the active fight.
-        TrackedFight target = rewardWindowOpen ? rewardFight : activeFight;
+        TrackedFight target = rewardWindowOpen ? fights.rewardFight : fights.activeFight;
         recordAcceptedLoot(itemId, unseenQuantity, "pickup", now, target);
     }
 
@@ -691,6 +586,12 @@ public final class Tracker {
                 now,
                 target == null ? 0 : target.history.id);
         noteReward(target, now);
+        diagnostics.record(
+                now,
+                LOOT,
+                ACCEPTED,
+                itemId + " x" + quantity,
+                source + " / fight " + (target == null ? "unknown" : target.history.id));
         if (config.rngTitles) {
             rng.notice(itemId, (int) quantity, unitPrice, now);
         }
@@ -732,7 +633,19 @@ public final class Tracker {
     public void newSession() {
         if (ready()) {
             clearFightContext();
+            long previousSession = ledger.sessionId;
             ledger.newSession();
+            if (config.sessionRecapChat
+                    && !ledger.sessionRecaps.isEmpty()
+                    && ledger.sessionRecaps.getLast().sessionId() == previousSession) {
+                sessionNotices.addLast(ledger.sessionRecaps.getLast());
+            }
+            diagnostics.record(
+                    System.currentTimeMillis(),
+                    SESSION,
+                    INFO,
+                    "Session " + ledger.sessionId,
+                    "Previous session recap saved when it had activity");
             lootDeduplicator.beginRewardWindow();
             ledgerDirty = true;
             save();
@@ -806,6 +719,9 @@ public final class Tracker {
     }
 
     public void save() {
+        ledgerDirty |= fights.consumeChanges();
+        if (ready())
+            refreshAchievements(System.currentTimeMillis(), config.achievementNotifications);
         if (!ready() || !ledgerDirty) {
             return;
         }
@@ -817,41 +733,72 @@ public final class Tracker {
         }
     }
 
+    /**
+     * New definitions are silently backfilled by the achievement module; live unlocks stay local.
+     */
+    private boolean refreshAchievements(long now, boolean notify) {
+        if (!ready() || achievementRevision == ledger.revision()) return false;
+        var update = Achievements.evaluate(ledger, ledger.achievements, now, notify);
+        achievementRevision = ledger.revision();
+        if (update.changed()) ledgerDirty = true;
+        achievementNotices.addAll(update.unlocks());
+        return update.changed();
+    }
+
+    public List<Achievements.Unlock> drainAchievements() {
+        if (!ready()) {
+            achievementNotices.clear();
+            return List.of();
+        }
+        var result = List.copyOf(achievementNotices);
+        achievementNotices.clear();
+        return result;
+    }
+
+    public List<SessionSummary.Snapshot> drainSessionRecaps() {
+        if (!ready()) {
+            sessionNotices.clear();
+            return List.of();
+        }
+        var result = List.copyOf(sessionNotices);
+        sessionNotices.clear();
+        return result;
+    }
+
+    public DetectionSnapshot detectionSnapshot(long now) {
+        TrackedFight fight =
+                fights.activeFight != null
+                        ? fights.activeFight
+                        : fights.awaitingDamageFight != null
+                                ? fights.awaitingDamageFight
+                                : fights.rewardFight;
+        return new DetectionSnapshot(
+                status(),
+                location,
+                detectionReason,
+                ready(),
+                inSkyblock,
+                inArena,
+                config.paused,
+                timerState(),
+                fight == null ? 0 : fight.history.id,
+                fight == null ? "None" : fight.history.outcome.name(),
+                fight == null ? 0 : fight.history.damage,
+                fight == null ? config.minimumDamage : fight.history.minimumDamage,
+                acceptsLoot(now),
+                acceptsStandLoot(now),
+                Math.max(0, rewardWindowUntil - now));
+    }
+
     public Path export() throws IOException {
         if (!ready()) {
             throw new IOException("No ledger loaded");
         }
-        Path exportDirectory = dataDirectory.resolve("exports");
-        Files.createDirectories(exportDirectory);
-        Path file =
-                exportDirectory.resolve(
-                        "arachne-" + config.profile + "-" + System.currentTimeMillis() + ".csv");
-        try (BufferedWriter writer = Files.newBufferedWriter(file)) {
-            writer.write("time_utc,active_ms,kind,item,quantity,unit_coins,income,cost,source\n");
-            int firstEntry = config.total ? 0 : ledger.sessionStart;
-            for (int index = firstEntry; index < ledger.entries.size(); index++) {
-                writer.write(csvRow(ledger.entries.get(index)));
-            }
-        }
-        return file;
-    }
-
-    private static String csvRow(Ledger.Entry entry) {
-        return String.join(
-                        ",",
-                        Instant.ofEpochMilli(entry.at()).toString(),
-                        Long.toString(entry.elapsed()),
-                        entry.kind().toString(),
-                        quoteCsv(entry.item()),
-                        Long.toString(entry.count()),
-                        Double.toString(entry.unit()),
-                        Double.toString(entry.income()),
-                        Double.toString(entry.cost()),
-                        quoteCsv(entry.source()))
-                + "\n";
-    }
-
-    private static String quoteCsv(String value) {
-        return "\"" + value.replace("\"", "\"\"") + "\"";
+        return LedgerCsv.write(
+                ledger,
+                config.total,
+                config.profile,
+                dataDirectory.resolve("exports"),
+                System.currentTimeMillis());
     }
 }

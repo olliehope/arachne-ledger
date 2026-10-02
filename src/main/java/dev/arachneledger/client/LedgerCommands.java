@@ -37,7 +37,29 @@ public final class LedgerCommands {
             Runnable refreshContext,
             Runnable diagnostics,
             Consumer<String> message,
-            Runnable settings) {
+            Runnable settings,
+            Runnable achievements,
+            Runnable recap,
+            Runnable diagnosticsScreen) {
+        public Actions(
+                Runnable dashboard,
+                Runnable hudEditor,
+                Runnable refreshContext,
+                Runnable diagnostics,
+                Consumer<String> message,
+                Runnable settings) {
+            this(
+                    dashboard,
+                    hudEditor,
+                    refreshContext,
+                    diagnostics,
+                    message,
+                    settings,
+                    dashboard,
+                    dashboard,
+                    diagnostics);
+        }
+
         /** Retains the existing embedding API while clients adopt the separate settings route. */
         public Actions(
                 Runnable dashboard,
@@ -85,6 +107,9 @@ public final class LedgerCommands {
     }
 
     private void displayCommands(LiteralArgumentBuilder<FabricClientCommandSource> root) {
+        root.then(literal("achievements").executes(c -> runReadOnly(actions.achievements())));
+        root.then(literal("recap").executes(c -> runReadOnly(actions.recap())));
+        root.then(literal("diagnostics").executes(c -> runReadOnly(actions.diagnosticsScreen())));
         root.then(
                 literal("settings")
                         .executes(
@@ -611,7 +636,7 @@ public final class LedgerCommands {
                                                     say(
                                                             "/arachne opens the dashboard. O is the default key.");
                                                     say(
-                                                            "settings | session | total | view | pause | new | undo | export | profile <name>");
+                                                            "settings | achievements | recap | diagnostics | session | total | view | pause | new | undo | export | profile <name>");
                                                     say(
                                                             "hud [on|off|edit|view|always] | track auto/manual | debug");
                                                     say(

@@ -42,6 +42,8 @@ public final class Config {
     public boolean killChat = true;
     public boolean rngTitles = true;
     public boolean rngValue = true;
+    public boolean achievementNotifications = true;
+    public boolean sessionRecapChat = true;
     public boolean dashboardFights = false;
     // Valuation preferences and participation threshold.
     public boolean autoBazaar = false;

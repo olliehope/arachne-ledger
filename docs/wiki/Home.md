@@ -16,10 +16,14 @@ Farm in Arachne's Sanctuary. The tracker records your summon costs, observed rew
 
 Profit uses your configured item values. Open **Settings → Prices & salvage** before relying on the estimate, especially for pets and other items without a default price. The default Minimal HUD keeps profit, hourly rates, and tracking status visible; customize it in **Settings → HUD**.
 
+Version 1.2 adds an achievement book, session recaps and personal records, diagnostics, optional profit rows without RNG, and custom HUD row order. Open **Journal** from the dashboard's Overview, Drops, or Fights tab to explore achievements, recaps and records, or tracking diagnostics.
+
 ## Guide
 
 - [Settings](https://github.com/olliehope/arachne-ledger/wiki/Settings): HUD, pricing, salvage, and notifications.
 - [Tracking and profit](https://github.com/olliehope/arachne-ledger/wiki/Tracking-and-Profit): timing, damage qualification, graphs, and corrections.
+- [Achievements](https://github.com/olliehope/arachne-ledger/wiki/Achievements): milestone tiers, detected progress, and unlock notifications.
+- [Diagnostics](https://github.com/olliehope/arachne-ledger/wiki/Diagnostics): detection decisions and local bug reports.
 - [Troubleshooting](https://github.com/olliehope/arachne-ledger/wiki/Troubleshooting): missing location, rewards, and save errors.
 - [Development](https://github.com/olliehope/arachne-ledger/wiki/Development): building and finding the relevant code.
 

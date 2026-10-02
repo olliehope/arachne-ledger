@@ -1,8 +1,10 @@
 package dev.arachneledger.ui;
 
 import dev.arachneledger.config.HudPreferences;
+import dev.arachneledger.config.HudRowOrder;
 import dev.arachneledger.ledger.Analytics;
 import dev.arachneledger.ledger.Ledger;
+import dev.arachneledger.ledger.ProfitBreakdown;
 import dev.arachneledger.skyblock.Catalog;
 import dev.arachneledger.tracking.Tracker;
 
@@ -84,6 +86,27 @@ public final class HudContent {
                                     : "--",
                             analytics.projectionReady() ? Hud.GOLD : Graph.MUTED));
         }
+        if (preferences.showRegularProfit || preferences.showRegularPerHour) {
+            ProfitBreakdown.Snapshot profit = tracker.ledger.profitBreakdown(tracker.config.total);
+            if (preferences.showRegularProfit) {
+                metrics.add(
+                        metric(
+                                "regularProfit",
+                                "Profit without RNG",
+                                Format.coins(profit.ordinaryNet()),
+                                profit.ordinaryNet() >= 0 ? Graph.GREEN : Graph.RED));
+            }
+            if (preferences.showRegularPerHour) {
+                metrics.add(
+                        metric(
+                                "regularHourly",
+                                "Without RNG / hour",
+                                profit.elapsed() < 1000
+                                        ? "--"
+                                        : Format.coins(profit.ordinaryHourly()),
+                                Hud.GOLD));
+            }
+        }
         if (preferences.showActiveTime) {
             metrics.add(
                     metric(
@@ -114,7 +137,16 @@ public final class HudContent {
                             Hud.TITLE,
                             Hud.TITLE));
         }
+        List<String> order = HudRowOrder.normalize(preferences.rowOrder);
+        Comparator<Row> byDisplayOrder =
+                Comparator.comparingInt(row -> order.indexOf(orderKey(row)));
+        rewards.sort(byDisplayOrder);
+        metrics.sort(byDisplayOrder);
         return new Snapshot(rewards, metrics);
+    }
+
+    private static String orderKey(Row row) {
+        return row.id().startsWith("loot:") || row.id().equals("emptyLoot") ? "loot" : row.id();
     }
 
     /** Filters and sorting affect the HUD list only; all loot remains in the selected totals. */

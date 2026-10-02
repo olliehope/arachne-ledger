@@ -23,6 +23,8 @@ Joining mid-fight can recover tracking from fresh boss activity, but the origina
 
 Actual hourly rates divide the selected session or lifetime value by its active time. Projected rates use the **current session's latest five active minutes**, or its elapsed active time if shorter. A projection needs at least 60 active seconds and one qualifying kill in that window. It always uses recent session pace, even when displaying lifetime totals. A small sample or rare drop can move it sharply.
 
+**Profit without RNG** uses the same recorded journal and active clock, excluding the loot value of Epic/Legendary Tarantula Pets and Arachne Fangs. It keeps normal loot, Scavenger and other coin income, and all Crystal, Calling, and other costs. These optional HUD rows show a baseline alongside jackpot-inclusive earnings; they do not discard drops or change the graph's existing metrics. Unpriced RNG drops contribute zero to both values.
+
 The graph's projected total extends the selected total by five more active minutes at that recent rate. It does not predict an unseen RNG drop.
 
 ## Graph
@@ -44,3 +46,15 @@ Other marked coin rewards received during farming cannot be distinguished from S
 **Adjust** adds a missed drop, coin income, or expense. `/arachne undo` removes the latest current-session entry. `/arachne export` saves a CSV under `config/arachneledger/exports` using the selected scope.
 
 Kill chat summaries are printed after a short collection delay. Later rewards still update totals but do not rewrite an already printed summary.
+
+## Session recaps and personal records
+
+**Recap → Current** shows selected session or lifetime finances, active time, qualifying kills, actual average and fastest kill times, summon counts and spend, Scavenger coins, and RNG value. The average includes only qualifying fights with a confirmed spawn and death; joining mid-fight or old history without a trustworthy spawn never creates an estimated speed record. Older kill receipts may contribute financial/kill totals without enough metadata for the qualified-kill or timing rows.
+
+Starting a new session captures the previous summary before resetting its boundary. **Last session** stays fixed even if later prices or historical corrections change the live journal. Up to 20 summaries are kept in the account/profile save. Session recap chat can be disabled independently of this capture.
+
+**Recap → Records** shows the fastest qualifying timed kill, most profitable qualifying fight, and most profitable tracked session. A qualifying record requires a Counted fight, damage meeting that fight's saved threshold, and a retained server kill receipt. Records use detected rewards from server, pickup, floating-label, personal pet-claim, and purse signals. Manual loot, manual coins, and manually replaced fight loot cannot increase records; associated costs still subtract.
+
+The best tracked session groups fight-associated receipts by their saved session IDs. It subtracts associated costs from unsuccessful attempts, and includes rewards only from qualifying kills. Unassociated historical receipts cannot be assigned to a past session, so this record can differ from a full financial session recap. Negative results are shown as recorded rather than replaced with zero.
+
+Personal records are recalculated after late rewards, explicit repricing, undo, or corrections. [Achievements](https://github.com/olliehope/arachne-ledger/wiki/Achievements) keep earned milestones once unlocked.

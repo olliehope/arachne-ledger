@@ -2,6 +2,7 @@ package dev.arachneledger.ui;
 
 import dev.arachneledger.config.Config;
 import dev.arachneledger.config.HudPreferences;
+import dev.arachneledger.config.HudRowOrder;
 import dev.arachneledger.config.Store;
 import dev.arachneledger.ledger.Ledger;
 import dev.arachneledger.skyblock.Catalog;
@@ -108,6 +109,8 @@ public final class HudContentChecks {
         scopeAndProjection(root.resolve("scope"));
         dimensionsAndHiddenRows(root.resolve("dimensions"));
         cyclingPreservesChoices(root.resolve("cycling"));
+        customRowOrder(root.resolve("order"));
+        profitWithoutRng(root.resolve("without-rng"));
         System.out.println("PASS: " + checks + " HUD content, selection, scope and layout checks.");
     }
 
@@ -408,6 +411,8 @@ public final class HudContentChecks {
         preferences.showTotalProfit = false;
         preferences.showProfitPerHour = false;
         preferences.showProjectedPerHour = false;
+        preferences.showRegularProfit = false;
+        preferences.showRegularPerHour = false;
         preferences.showActiveTime = false;
         preferences.showScope = false;
         preferences.showStatus = false;
@@ -514,12 +519,15 @@ public final class HudContentChecks {
         preferences.maxLootRows = 8;
         preferences.sort = HudPreferences.Sort.NAME;
         preferences.hiddenItems.add("SOUL_STRING");
+        preferences.rowOrder = HudRowOrder.move(preferences.rowOrder, "profit", 1);
+        preferences.showRegularProfit = true;
         config.graph.showSpawns = true;
         config.hudX = 0.3;
         config.hudY = 0.7;
         config.hudScale = 1.25;
         List<Ledger.Entry> receipts = List.copyOf(tracker.ledger.entries);
         HudContent.Snapshot initial = HudContent.build(tracker);
+        List<String> initialOrder = List.copyOf(preferences.rowOrder);
 
         List<HudPreferences.Layout> expectedLayouts =
                 List.of(
@@ -552,6 +560,10 @@ public final class HudContentChecks {
                     tracker.ledger.entries,
                     "Arrangement cycling never rewrites financial entries");
             yes(config.graph.showSpawns, "Arrangement cycling preserves graph configuration");
+            same(
+                    initialOrder,
+                    preferences.rowOrder,
+                    "Arrangement cycling preserves custom stat order");
         }
         same(0.3, config.hudX, "Arrangement cycling preserves horizontal position");
         same(0.7, config.hudY, "Arrangement cycling preserves vertical position");
@@ -574,5 +586,187 @@ public final class HudContentChecks {
         yes(
                 reopened.hudPreferences.hiddenItems.contains("SOUL_STRING"),
                 "Individual item exclusions survive cycling and reload");
+        same(
+                initialOrder,
+                reopened.hudPreferences.rowOrder,
+                "Custom stat order survives cycling and reload");
+        yes(
+                reopened.hudPreferences.showRegularProfit,
+                "Optional profit-without-RNG row survives cycling and reload");
+    }
+
+    private static void customRowOrder(Path directory) {
+        Tracker tracker = fixture(directory);
+        HudPreferences preferences = tracker.config.hudPreferences;
+        preferences.applyPreset(HudPreferences.Layout.CLASSIC);
+        preferences.maxLootRows = 8;
+        preferences.rowOrder = List.of("kills", "status", "scavenger", "profit", "loot", "hourly");
+        List<Ledger.Entry> receipts = List.copyOf(tracker.ledger.entries);
+        Ledger.Stats stats = tracker.ledger.stats(false);
+        long revision = tracker.ledger.revision();
+        HudContent.Snapshot ordered = HudContent.build(tracker);
+        same(
+                List.of(
+                        "kills",
+                        "scavenger",
+                        "loot:SOUL_STRING",
+                        "loot:LUXURIOUS_SPOOL",
+                        "loot:SPIDER_EYE",
+                        "loot:STRING",
+                        "loot:ARACHNE_FANG",
+                        "crystalCosts",
+                        "callingCosts"),
+                ordered.rewards().stream().map(HudContent.Row::id).toList(),
+                "Custom reward order moves the loot block while preserving its item sort order");
+        same(
+                List.of(
+                        "status",
+                        "profit",
+                        "hourly",
+                        "projectedHourly",
+                        "activeTime",
+                        "scope",
+                        "unpriced"),
+                ordered.metrics().stream().map(HudContent.Row::id).toList(),
+                "Custom summary order stays separate from reward keys in the same saved list");
+        for (HudPreferences.Layout layout : HudPreferences.Layout.values()) {
+            preferences.layout = layout;
+            same(
+                    ordered,
+                    HudContent.build(tracker),
+                    "Changing to " + layout + " preserves the selected row order");
+        }
+        preferences.showKills = false;
+        preferences.hiddenItems.add("SOUL_STRING");
+        same(
+                "scavenger",
+                HudContent.build(tracker).rewards().getFirst().id(),
+                "Hiding the first row lets the next ordered row lead");
+        preferences.showKills = true;
+        preferences.hiddenItems.clear();
+        same(
+                ordered,
+                HudContent.build(tracker),
+                "Re-enabling hidden rows restores their saved positions");
+        preferences.rowOrder = List.of("emptyLoot", "unknown", "status", "status", "profit");
+        same(
+                "status",
+                HudContent.build(tracker).metrics().getFirst().id(),
+                "Damaged unsaved order cannot duplicate or suppress rows");
+        same(
+                receipts,
+                tracker.ledger.entries,
+                "Ordering and hiding blocks never alter journal receipts");
+        same(
+                stats,
+                tracker.ledger.stats(false),
+                "Custom row order leaves accounting totals unchanged");
+        same(
+                revision,
+                tracker.ledger.revision(),
+                "Custom row order does not invalidate accounting history");
+
+        Tracker empty = emptyTracker(directory.resolve("empty"));
+        empty.config.hudPreferences.showLoot = true;
+        empty.config.hudPreferences.showKills = true;
+        empty.config.hudPreferences.rowOrder = List.of("kills", "loot");
+        same(
+                List.of("kills", "emptyLoot"),
+                HudContent.build(empty).rewards().stream().map(HudContent.Row::id).toList(),
+                "The empty-loot placeholder follows the same movable block order");
+    }
+
+    private static void profitWithoutRng(Path directory) {
+        Tracker tracker = fixture(directory);
+        add(tracker.ledger, Ledger.Kind.LOOT, "TARANTULA_LEGENDARY", 1, 1_000_000);
+        add(tracker.ledger, Ledger.Kind.LOOT, "TARANTULA_EPIC", 1, 100_000);
+        add(tracker.ledger, Ledger.Kind.LOOT, "ARACHNE_FANG", 2, 5_000);
+        HudPreferences preferences = tracker.config.hudPreferences;
+        int baseHeight = Hud.panelHeight(tracker.config);
+        preferences.showRegularProfit = true;
+        preferences.showRegularPerHour = true;
+        preferences.rowOrder = List.of("regularProfit", "regularHourly", "profit", "hourly");
+        List<Ledger.Entry> receipts = List.copyOf(tracker.ledger.entries);
+        Ledger.Stats stats = tracker.ledger.stats(false);
+        HudContent.Snapshot content = HudContent.build(tracker);
+        same(
+                "Profit without RNG",
+                row(content, "regularProfit").label(),
+                "Ordinary-profit label explains the excluded income");
+        same(
+                Format.coins(9_733),
+                row(content, "regularProfit").value(),
+                "Ordinary profit excludes both pets and Fangs, retaining Scavenger and all costs");
+        same(
+                Format.coins(583_980),
+                row(content, "regularHourly").value(),
+                "Ordinary hourly rate uses the same selected active time");
+        same(
+                Format.coins(1_119_733),
+                row(content, "profit").value(),
+                "Total profit still includes every recorded RNG drop");
+        same(
+                List.of("regularProfit", "regularHourly", "profit", "hourly"),
+                content.metrics().stream().map(HudContent.Row::id).limit(4).toList(),
+                "Ordinary-profit rows obey the user's summary order");
+        same(
+                baseHeight + 22,
+                Hud.panelHeight(tracker.config),
+                "Both new metrics reserve exactly two additional HUD rows");
+        preferences.hiddenItems.add("TARANTULA_LEGENDARY");
+        preferences.hiddenItems.add("SOUL_STRING");
+        same(
+                content,
+                HudContent.build(tracker),
+                "Item display filters do not change either profit summary");
+        same(
+                receipts,
+                tracker.ledger.entries,
+                "Displaying profit without RNG never rewrites receipts");
+        same(
+                stats,
+                tracker.ledger.stats(false),
+                "Displaying profit without RNG never changes total profit");
+        preferences.showRegularProfit = false;
+        yes(
+                allRows(HudContent.build(tracker)).stream()
+                        .noneMatch(row -> row.id().equals("regularProfit")),
+                "Ordinary total can be hidden independently of its rate");
+        same(
+                Format.coins(583_980),
+                row(HudContent.build(tracker), "regularHourly").value(),
+                "Hiding ordinary total keeps ordinary hourly visible");
+
+        tracker.ledger.newSession();
+        preferences.showRegularProfit = true;
+        same(
+                "0",
+                row(HudContent.build(tracker), "regularProfit").value(),
+                "A new session clears ordinary profit in session scope");
+        same(
+                "--",
+                row(HudContent.build(tracker), "regularHourly").value(),
+                "A zero-time session shows no ordinary hourly rate");
+        add(tracker.ledger, Ledger.Kind.CRYSTAL, "ARACHNE_CRYSTAL", 1, 1_000);
+        add(tracker.ledger, Ledger.Kind.LOOT, "TARANTULA_LEGENDARY", 1, 2_000_000);
+        advance(tracker.ledger, 60_000);
+        content = HudContent.build(tracker);
+        same(
+                Format.coins(-1_000),
+                row(content, "regularProfit").value(),
+                "An RNG-only session still includes its summon cost as an ordinary loss");
+        same(
+                Graph.RED,
+                row(content, "regularProfit").valueColor(),
+                "Ordinary losses use loss coloring");
+        tracker.config.total = true;
+        same(
+                Format.coins(8_733),
+                row(HudContent.build(tracker), "regularProfit").value(),
+                "Lifetime ordinary profit includes earlier ordinary revenue and both sessions' costs");
+        same(
+                Format.coins(261_990),
+                row(HudContent.build(tracker), "regularHourly").value(),
+                "Lifetime ordinary rate uses both sessions' active time");
     }
 }

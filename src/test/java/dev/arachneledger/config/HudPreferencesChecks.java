@@ -4,6 +4,7 @@ import dev.arachneledger.ledger.Ledger;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -39,6 +40,8 @@ public final class HudPreferencesChecks {
         legacyMigration(root.resolve("legacy.json"));
         customPersistence(root.resolve("custom.json"));
         normalization();
+        rowOrderMigration(root.resolve("row-order.json"));
+        rowMovement();
         presetsAndIsolation();
         System.out.println("PASS: " + checks + " HUD preference, migration and isolation checks.");
     }
@@ -56,6 +59,13 @@ public final class HudPreferencesChecks {
                 fresh.hudPreferences.maxLootRows,
                 "Enabling loot later has a useful default row limit");
         yes(fresh.hudPreferences.hiddenItems.isEmpty(), "New settings do not hide specific items");
+        yes(
+                !fresh.hudPreferences.showRegularProfit && !fresh.hudPreferences.showRegularPerHour,
+                "Profit without RNG is optional so the default stays small");
+        same(
+                HudRowOrder.defaultOrder(),
+                fresh.hudPreferences.rowOrder,
+                "New HUD rows use the default order");
     }
 
     private static void minimal(HudPreferences preferences, String context) {
@@ -142,6 +152,9 @@ public final class HudPreferencesChecks {
         preferences.showScope = true;
         preferences.showStatus = false;
         preferences.showUnpricedWarning = true;
+        preferences.showRegularProfit = true;
+        preferences.showRegularPerHour = true;
+        preferences.rowOrder = HudRowOrder.move(preferences.rowOrder, "status", -1);
         preferences.maxLootRows = 8;
         preferences.sort = HudPreferences.Sort.QUANTITY;
         preferences.hiddenItems.add("STRING");
@@ -157,6 +170,10 @@ public final class HudPreferencesChecks {
                 List.copyOf(saved.hiddenItems),
                 "Per-item exclusions persist in their saved order");
         same(rowFlags(preferences), rowFlags(saved), "Every individual row selection persists");
+        yes(
+                saved.showRegularProfit && saved.showRegularPerHour,
+                "Both profit-without-RNG toggles persist");
+        same(preferences.rowOrder, saved.rowOrder, "Custom stat order persists");
 
         saved.maxLootRows = 0;
         saved.sort = HudPreferences.Sort.NAME;
@@ -242,12 +259,24 @@ public final class HudPreferencesChecks {
                 rowFlags(config.hudPreferences).stream().allMatch(Boolean::booleanValue),
                 "Classic enables the full set of optional rows");
         config.hudPreferences.hiddenItems.add("SOUL_STRING");
+        config.hudPreferences.showRegularProfit = true;
+        config.hudPreferences.showRegularPerHour = true;
+        config.hudPreferences.rowOrder =
+                HudRowOrder.move(config.hudPreferences.rowOrder, "status", -1);
         config.hudPreferences.maxLootRows = 8;
         config.hudPreferences.sort = HudPreferences.Sort.NAME;
         config.hudPreferences.applyPreset(HudPreferences.Layout.MINIMAL);
         minimal(config.hudPreferences, "An explicit Minimal preset");
         same(3, config.hudPreferences.maxLootRows, "A preset resets the loot limit");
         yes(config.hudPreferences.hiddenItems.isEmpty(), "A preset resets item exclusions");
+        same(
+                HudRowOrder.defaultOrder(),
+                config.hudPreferences.rowOrder,
+                "A preset resets custom stat order");
+        yes(
+                !config.hudPreferences.showRegularProfit
+                        && !config.hudPreferences.showRegularPerHour,
+                "A preset resets optional profit-without-RNG rows");
         config.hudPreferences.applyPreset(HudPreferences.Layout.SPLIT);
         yes(
                 config.hudPreferences.showLoot
@@ -277,5 +306,98 @@ public final class HudPreferencesChecks {
                 2L,
                 ledger.stats(true).loot().get("SOUL_STRING"),
                 "Item visibility never deletes recorded quantities");
+    }
+
+    private static void rowOrderMigration(Path file) throws Exception {
+        Files.writeString(
+                file, "{\"hudPreferences\":{\"rowOrder\":null,\"showTotalProfit\":false}}");
+        HudPreferences preferences = read(file).hudPreferences;
+        same(
+                HudRowOrder.defaultOrder(),
+                preferences.rowOrder,
+                "A null saved order migrates to supported rows");
+        yes(!preferences.showTotalProfit, "Order migration keeps hidden rows hidden");
+
+        Files.writeString(
+                file,
+                "{\"hudPreferences\":{\"rowOrder\":[\"status\",null,\"unknown\",\"profit\",\"status\",\"loot\"]}}");
+        preferences = read(file).hudPreferences;
+        List<String> expected = new ArrayList<>(List.of("status", "profit", "loot"));
+        HudRowOrder.defaultOrder().stream()
+                .filter(id -> !expected.contains(id))
+                .forEach(expected::add);
+        same(expected, preferences.rowOrder, "Supported custom order wins and missing rows append");
+        yes(
+                !preferences.showRegularProfit && !preferences.showRegularPerHour,
+                "New toggles stay off in older settings");
+        Store.write(file, read(file));
+        same(
+                expected,
+                read(file).hudPreferences.rowOrder,
+                "Normalized order survives a save and reopen");
+        preferences.rowOrder.clear();
+        preferences.validate();
+        same(
+                HudRowOrder.defaultOrder(),
+                preferences.rowOrder,
+                "An empty order restores every available row");
+        preferences.rowOrder.add("unknown");
+        preferences.rowOrder.add("profit");
+        preferences.validate();
+        same(
+                HudRowOrder.defaultOrder(),
+                preferences.rowOrder,
+                "Validation removes duplicate and unknown appended rows");
+    }
+
+    private static void rowMovement() {
+        List<String> original = HudRowOrder.defaultOrder();
+        yes(
+                !HudRowOrder.canMove(original, "loot", -1),
+                "The first reward row cannot move into the summary group");
+        yes(
+                !HudRowOrder.canMove(original, "kills", 1),
+                "The final reward row cannot move into the summary group");
+        yes(
+                !HudRowOrder.canMove(original, "profit", -1),
+                "The first summary row cannot move into the reward group");
+        yes(
+                !HudRowOrder.canMove(original, "regularHourly", 1),
+                "The last summary row cannot move past its group");
+        yes(!HudRowOrder.canMove(original, "unknown", 1), "Unknown keys cannot be moved");
+        yes(!HudRowOrder.canMove(original, "profit", 0), "A zero direction is a no-op");
+        List<String> changed = HudRowOrder.move(original, "loot", 1);
+        same(
+                List.of("scavenger", "loot", "crystalCosts", "callingCosts", "kills"),
+                HudRowOrder.rows(changed, HudRowOrder.Group.REWARDS).stream()
+                        .map(HudRowOrder.Definition::id)
+                        .toList(),
+                "Moving the loot block swaps the adjacent reward key");
+        same(HudRowOrder.defaultOrder(), original, "Moving a row never mutates its input list");
+        same(
+                original,
+                HudRowOrder.move(changed, "loot", -1),
+                "Moving back restores the exact order");
+        same(
+                original,
+                HudRowOrder.move(original, "profit", -1),
+                "Moving across a group boundary leaves the order intact");
+        same(
+                original,
+                HudRowOrder.move(original, "unknown", 1),
+                "Unknown movement preserves supported keys");
+        List<String> interleaved = List.of("status", "loot", "profit", "scavenger", "hourly");
+        List<String> moved = HudRowOrder.move(interleaved, "profit", -1);
+        same(
+                List.of("profit", "status", "hourly"),
+                HudRowOrder.rows(moved, HudRowOrder.Group.METRICS).stream()
+                        .map(HudRowOrder.Definition::id)
+                        .limit(3)
+                        .toList(),
+                "Even interleaved saved keys move within their own column");
+        same(
+                HudRowOrder.rows(interleaved, HudRowOrder.Group.REWARDS),
+                HudRowOrder.rows(moved, HudRowOrder.Group.REWARDS),
+                "Summary movement leaves the entire reward order unchanged");
     }
 }

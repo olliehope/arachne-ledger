@@ -217,6 +217,8 @@ public final class Hud {
 
     private static int metricRowCount(HudPreferences preferences) {
         return (preferences.showTotalProfit ? 1 : 0)
+                + (preferences.showRegularProfit ? 1 : 0)
+                + (preferences.showRegularPerHour ? 1 : 0)
                 + (preferences.showProfitPerHour ? 1 : 0)
                 + (preferences.showProjectedPerHour ? 1 : 0)
                 + (preferences.showActiveTime ? 1 : 0)

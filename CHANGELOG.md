@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0
+
+- Added 17 Arachne achievements with tiers, progress bars, a hidden rare milestone, optional unlock chat, and silent backfill from existing history.
+- Added session recaps, personal records, and profit/hour excluding Tarantula pets and Arachne Fangs.
+- Added individual HUD row ordering and optional profit-without-RNG rows.
+- Added a tracking diagnostics page with live eligibility, accepted/ignored observations, and copy/save reports.
+- Split clock, fight reports, CSV export, deferred navigation, and local notifications into focused modules; preserved existing settings and ledger history.
+
 ## 1.1.0
 
 - Added Minimal, Classic, and Split HUD layouts, with individual controls for displayed stats and loot rows. Minimal is the default.

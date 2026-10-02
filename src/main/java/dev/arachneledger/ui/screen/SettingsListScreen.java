@@ -16,13 +16,27 @@ import java.util.List;
 
 /** Shared scrolling rows for preference pages; each page supplies its own settings and actions. */
 abstract class SettingsListScreen extends Screen {
+    protected record AdditionalAction(
+            String value, boolean active, String tooltip, Runnable action) {}
+
     protected record Option(
             String label,
             String value,
             boolean selected,
             boolean active,
             String tooltip,
-            Runnable action) {}
+            Runnable action,
+            AdditionalAction additionalAction) {
+        protected Option(
+                String label,
+                String value,
+                boolean selected,
+                boolean active,
+                String tooltip,
+                Runnable action) {
+            this(label, value, selected, active, tooltip, action, null);
+        }
+    }
 
     protected final Screen parent;
     protected final Tracker tracker = ArachneLedger.tracker;
@@ -64,7 +78,7 @@ abstract class SettingsListScreen extends Screen {
                     new FlatButton(
                             panelX + panelWidth - 120,
                             panelY + 67 + (index - scrollOffset) * 22,
-                            104,
+                            row.additionalAction() == null ? 104 : 50,
                             20,
                             row.value(),
                             row.selected(),
@@ -72,6 +86,21 @@ abstract class SettingsListScreen extends Screen {
             button.active = row.active();
             button.setTooltip(Tooltip.create(Component.literal(row.tooltip())));
             addRenderableWidget(button);
+            if (row.additionalAction() != null) {
+                AdditionalAction action = row.additionalAction();
+                var additional =
+                        new FlatButton(
+                                panelX + panelWidth - 66,
+                                panelY + 67 + (index - scrollOffset) * 22,
+                                50,
+                                20,
+                                action.value(),
+                                false,
+                                action.action());
+                additional.active = action.active();
+                additional.setTooltip(Tooltip.create(Component.literal(action.tooltip())));
+                addRenderableWidget(additional);
+            }
         }
         addFooterControls();
     }

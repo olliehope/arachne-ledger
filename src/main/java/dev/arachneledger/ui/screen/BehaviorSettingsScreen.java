@@ -16,6 +16,7 @@ public final class BehaviorSettingsScreen extends SettingsListScreen {
     private String damageInput;
     private EditBox minimumDamageField;
     private boolean killChat, rngTitles, rngValue, scavengerCoins;
+    private boolean achievementNotifications, sessionRecapChat;
 
     public BehaviorSettingsScreen(Screen parent) {
         super(parent, "Tracking settings", "Changes apply to future fights and rewards.");
@@ -24,6 +25,8 @@ public final class BehaviorSettingsScreen extends SettingsListScreen {
         rngTitles = tracker.config.rngTitles;
         rngValue = tracker.config.rngValue;
         scavengerCoins = tracker.config.scavengerCoins;
+        achievementNotifications = tracker.config.achievementNotifications;
+        sessionRecapChat = tracker.config.sessionRecapChat;
     }
 
     @Override
@@ -79,7 +82,17 @@ public final class BehaviorSettingsScreen extends SettingsListScreen {
                         "Scavenger coins",
                         scavengerCoins,
                         "Record the yellow purse gain shown during Arachne tracking. Turning this off does not remove previously recorded coins.",
-                        () -> scavengerCoins = !scavengerCoins));
+                        () -> scavengerCoins = !scavengerCoins),
+                toggle(
+                        "Achievement chat",
+                        achievementNotifications,
+                        "Show local achievement unlock messages. Existing history is backfilled silently.",
+                        () -> achievementNotifications = !achievementNotifications),
+                toggle(
+                        "Session recap chat",
+                        sessionRecapChat,
+                        "Print a short recap when you start a new session. Captured recaps remain in Journal.",
+                        () -> sessionRecapChat = !sessionRecapChat));
     }
 
     @Override
@@ -135,6 +148,8 @@ public final class BehaviorSettingsScreen extends SettingsListScreen {
         tracker.config.rngTitles = rngTitles;
         tracker.config.rngValue = rngValue;
         tracker.config.scavengerCoins = scavengerCoins;
+        tracker.config.achievementNotifications = achievementNotifications;
+        tracker.config.sessionRecapChat = sessionRecapChat;
         tracker.saveConfig();
         note =
                 tracker.error.isEmpty()

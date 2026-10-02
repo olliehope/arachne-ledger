@@ -1,5 +1,6 @@
 package dev.arachneledger.ledger;
 
+import dev.arachneledger.achievement.AchievementState;
 import dev.arachneledger.config.Config;
 import dev.arachneledger.skyblock.Catalog;
 import dev.arachneledger.skyblock.PurseCoins;
@@ -93,6 +94,11 @@ public final class Ledger {
 
     public List<Entry> entries = new ArrayList<>();
     public List<FightRecord> fights = new ArrayList<>();
+    public AchievementState achievements = new AchievementState();
+
+    /** Immutable recaps retain the actual active clock at the end of a session. */
+    public List<SessionSummary.Snapshot> sessionRecaps = new ArrayList<>();
+
     public long sessionId = 1;
     public long nextFightId = 1;
     public long nextEntryId = 1;
@@ -106,6 +112,10 @@ public final class Ledger {
     private transient long cachedAnalyticsRevision = -1;
     private transient long cachedAnalyticsActiveMillis = -1;
     private transient boolean cachedAnalyticsTotalScope;
+    private transient ProfitBreakdown.Snapshot cachedProfitBreakdown;
+    private transient long cachedProfitRevision = -1;
+    private transient long cachedProfitActiveMillis = -1;
+    private transient boolean cachedProfitTotalScope;
 
     public long revision() {
         return revision;
@@ -147,6 +157,11 @@ public final class Ledger {
     }
 
     public void newSession() {
+        SessionSummary.Snapshot recap = SessionSummary.capture(this, false);
+        if (recap.hasActivity()) {
+            sessionRecaps.add(recap);
+            if (sessionRecaps.size() > 20) sessionRecaps.removeFirst();
+        }
         sessionStart = entries.size();
         sessionMillis = activeMillis;
         sessionId++;
@@ -491,6 +506,21 @@ public final class Ledger {
         return cachedAnalytics;
     }
 
+    /** Reuse financial derivations across render frames; rates follow the live active clock. */
+    public ProfitBreakdown.Snapshot profitBreakdown(boolean total) {
+        if (cachedProfitBreakdown == null
+                || cachedProfitRevision != revision
+                || cachedProfitTotalScope != total) {
+            cachedProfitBreakdown = ProfitBreakdown.calculate(this, total);
+            cachedProfitRevision = revision;
+            cachedProfitTotalScope = total;
+        } else if (cachedProfitActiveMillis != activeMillis) {
+            cachedProfitBreakdown = ProfitBreakdown.retime(this, total, cachedProfitBreakdown);
+        }
+        cachedProfitActiveMillis = activeMillis;
+        return cachedProfitBreakdown;
+    }
+
     public void validate() {
         revision++;
         validateHeader();
@@ -498,6 +528,26 @@ public final class Ledger {
         Set<Long> fightIds = validateFightHistory();
         advanceEntryIdPastSavedEntries();
         validateJournal(fightIds);
+        if (achievements == null) achievements = new AchievementState();
+        achievements.validate();
+        if (sessionRecaps == null) sessionRecaps = new ArrayList<>();
+        if (sessionRecaps.size() > 20) {
+            throw new IllegalArgumentException("Too many saved session recaps");
+        }
+        long previousSession = 0;
+        for (SessionSummary.Snapshot recap : sessionRecaps) {
+            if (recap == null
+                    || recap.total()
+                    || recap.sessionId() <= previousSession
+                    || recap.sessionId() >= sessionId) {
+                throw new IllegalArgumentException("Invalid saved session recap");
+            }
+            recap.validate();
+            if (recap.profit().elapsed() > activeMillis) {
+                throw new IllegalArgumentException("Invalid session recap duration");
+            }
+            previousSession = recap.sessionId();
+        }
         clearDerivedCaches();
     }
 
@@ -609,5 +659,8 @@ public final class Ledger {
         cachedAnalytics = null;
         cachedAnalyticsRevision = -1;
         cachedAnalyticsActiveMillis = -1;
+        cachedProfitBreakdown = null;
+        cachedProfitRevision = -1;
+        cachedProfitActiveMillis = -1;
     }
 }

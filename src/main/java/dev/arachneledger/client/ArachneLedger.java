@@ -5,9 +5,6 @@ import dev.arachneledger.skyblock.LootLabels;
 import dev.arachneledger.skyblock.Messages;
 import dev.arachneledger.tracking.Tracker;
 import dev.arachneledger.ui.Hud;
-import dev.arachneledger.ui.screen.DashboardScreen;
-import dev.arachneledger.ui.screen.HudEditorScreen;
-import dev.arachneledger.ui.screen.SettingsScreen;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
@@ -40,9 +37,6 @@ public final class ArachneLedger implements ClientModInitializer {
     /** Shared with render hooks and the pickup mixin; created before those hooks register. */
     public static Tracker tracker;
 
-    private static boolean openRequested;
-    private static boolean editRequested;
-    private static boolean settingsRequested;
     private static Object lastLevel;
     private int clientTicks;
 
@@ -88,12 +82,15 @@ public final class ArachneLedger implements ClientModInitializer {
         LedgerCommands.register(
                 tracker,
                 new LedgerCommands.Actions(
-                        () -> openRequested = true,
-                        () -> editRequested = true,
+                        () -> ClientScreens.request(ClientScreens.Page.DASHBOARD),
+                        () -> ClientScreens.request(ClientScreens.Page.HUD),
                         () -> updateContext(Minecraft.getInstance(), System.currentTimeMillis()),
                         ArachneLedger::debug,
                         ArachneLedger::say,
-                        () -> settingsRequested = true));
+                        () -> ClientScreens.request(ClientScreens.Page.SETTINGS),
+                        () -> ClientScreens.request(ClientScreens.Page.ACHIEVEMENTS),
+                        () -> ClientScreens.request(ClientScreens.Page.RECAP),
+                        () -> ClientScreens.request(ClientScreens.Page.DIAGNOSTICS)));
     }
 
     private void tick(
@@ -109,9 +106,9 @@ public final class ArachneLedger implements ClientModInitializer {
         tracker.tick(now, tracker.refreshArea(now));
         updatePricesAndAlerts(client, now);
         observeRewardLabels(client, now);
-        publishKillSummaries(client);
+        ClientNotifications.publish(client, tracker);
         handleKeybindings(openDashboardKey, toggleScopeKey, cycleHudViewKey);
-        openRequestedScreen(client);
+        ClientScreens.openRequested(client);
     }
 
     private static void updatePricesAndAlerts(Minecraft client, long now) {
@@ -125,42 +122,16 @@ public final class ArachneLedger implements ClientModInitializer {
         tracker.rng.setVisible(canShowRareTitles(client), now);
     }
 
-    private static void publishKillSummaries(Minecraft client) {
-        for (var summary : tracker.drainKillSummaries()) {
-            if (client.player != null) {
-                client.gui.getChat().addClientSystemMessage(killSummaryMessage(summary));
-            }
-        }
-    }
-
     private static void handleKeybindings(
             KeyMapping openDashboardKey, KeyMapping toggleScopeKey, KeyMapping cycleHudViewKey) {
         while (openDashboardKey.consumeClick()) {
-            openRequested = true;
+            ClientScreens.request(ClientScreens.Page.DASHBOARD);
         }
         while (toggleScopeKey.consumeClick()) {
             tracker.toggleScope();
         }
         while (cycleHudViewKey.consumeClick()) {
             tracker.cycleView();
-        }
-    }
-
-    private static void openRequestedScreen(Minecraft client) {
-        // Defer screen changes to a tick so command/message callbacks do not replace a screen
-        // mid-event.
-        if (settingsRequested) {
-            settingsRequested = false;
-            editRequested = false;
-            openRequested = false;
-            client.setScreen(new SettingsScreen(null));
-        } else if (editRequested) {
-            editRequested = false;
-            openRequested = false;
-            client.setScreen(new HudEditorScreen(null));
-        } else if (openRequested) {
-            openRequested = false;
-            client.setScreen(new DashboardScreen(null));
         }
     }
 

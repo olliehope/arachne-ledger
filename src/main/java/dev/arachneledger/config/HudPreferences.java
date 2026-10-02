@@ -3,6 +3,7 @@ package dev.arachneledger.config;
 import dev.arachneledger.skyblock.Catalog;
 
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -56,6 +57,8 @@ public final class HudPreferences {
     public boolean showTotalProfit = true;
     public boolean showProfitPerHour = true;
     public boolean showProjectedPerHour = true;
+    public boolean showRegularProfit = false;
+    public boolean showRegularPerHour = false;
     public boolean showActiveTime = false;
     public boolean showScope = false;
     public boolean showStatus = true;
@@ -66,6 +69,9 @@ public final class HudPreferences {
 
     /** Item IDs excluded from the HUD only; their recorded quantities and income remain intact. */
     public Set<String> hiddenItems = new LinkedHashSet<>();
+
+    /** Stable stat keys; the loot list moves as one block and preserves its own sort order. */
+    public List<String> rowOrder = HudRowOrder.defaultOrder();
 
     /** Restore a complete preset, including loot sorting and individual item visibility. */
     public void applyPreset(Layout preset) {
@@ -83,6 +89,8 @@ public final class HudPreferences {
         showTotalProfit = true;
         showProfitPerHour = true;
         showProjectedPerHour = true;
+        showRegularProfit = false;
+        showRegularPerHour = false;
         showActiveTime = expanded;
         showScope = classic;
         showStatus = true;
@@ -90,6 +98,7 @@ public final class HudPreferences {
         sort = Sort.VALUE;
         maxLootRows = 3;
         hiddenItems = new LinkedHashSet<>();
+        rowOrder = HudRowOrder.defaultOrder();
     }
 
     /** Normalize damaged or older display settings without resetting custom row selections. */
@@ -101,6 +110,7 @@ public final class HudPreferences {
             sort = Sort.VALUE;
         }
         maxLootRows = Math.max(0, Math.min(8, maxLootRows));
+        rowOrder = HudRowOrder.normalize(rowOrder);
         Set<String> supportedHiddenItems = new LinkedHashSet<>();
         if (hiddenItems != null) {
             for (String itemId : hiddenItems) {
