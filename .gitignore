@@ -3,14 +3,14 @@
 build/
 out/
 *.class
-# Versioned release folders created by stageRelease
+# Local versioned release folders
 /[0-9]*.[0-9]*.[0-9]*/
 
 # Local Minecraft worlds, settings, logs and accounts
-run/
-logs/
-config/
-crash-reports/
+/run/
+/logs/
+/config/
+/crash-reports/
 
 # Editor and machine-specific configuration
 .idea/

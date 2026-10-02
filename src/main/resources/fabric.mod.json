@@ -13,7 +13,7 @@
   "icon": "assets/arachneledger/icon.png",
   "environment": "client",
   "entrypoints": {
-    "client": ["dev.arachneledger.ArachneLedger"],
+    "client": ["dev.arachneledger.client.ArachneLedger"],
     "modmenu": ["dev.arachneledger.integration.ModMenuIntegration"]
   },
   "mixins": ["arachneledger.mixins.json"],

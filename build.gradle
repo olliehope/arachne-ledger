@@ -54,17 +54,35 @@ processResources {
 // These deterministic main-method suites use the real runtime classpath, without a game server.
 // Keep their registration visible here so new modules have one obvious verification entry point.
 def regressionSuites = [
-    'Tracker', 'Analytics', 'LocationDetection', 'Integration', 'LootLabels', 'LootTracking',
-    'Fight', 'History', 'Bazaar', 'RngAlerts', 'LootDeduplicator', 'Spawn', 'PurseCoins',
-    'Valuation', 'BazaarModes', 'Graph', 'T2Spawn', 'PetReward', 'Persistence'
+    'HudPreferences': 'dev.arachneledger.config',
+    'HudContent': 'dev.arachneledger.ui',
+    'Analytics': 'dev.arachneledger.ledger',
+    'Bazaar': 'dev.arachneledger.pricing',
+    'BazaarModes': 'dev.arachneledger.pricing',
+    'Fight': 'dev.arachneledger.tracking',
+    'Graph': 'dev.arachneledger.ui',
+    'History': 'dev.arachneledger.tracking',
+    'Integration': 'dev.arachneledger.tracking',
+    'LocationDetection': 'dev.arachneledger.skyblock',
+    'LootDeduplicator': 'dev.arachneledger.tracking',
+    'LootLabels': 'dev.arachneledger.skyblock',
+    'LootTracking': 'dev.arachneledger.tracking',
+    'Persistence': 'dev.arachneledger.config',
+    'PetReward': 'dev.arachneledger.tracking',
+    'PurseCoins': 'dev.arachneledger.skyblock',
+    'RngAlerts': 'dev.arachneledger.ui',
+    'Spawn': 'dev.arachneledger.tracking',
+    'T2Spawn': 'dev.arachneledger.tracking',
+    'Tracker': 'dev.arachneledger.tracking',
+    'Valuation': 'dev.arachneledger.tracking'
 ]
-regressionSuites.each { suite ->
+regressionSuites.each { suite, suitePackage ->
     def verification = tasks.register("verify${suite}", JavaExec) {
         group = 'verification'
         description = "Run the ${suite} regression checks."
         dependsOn testClasses
         classpath = sourceSets.test.runtimeClasspath
-        mainClass = "dev.arachneledger.${suite}Checks"
+        mainClass = "${suitePackage}.${suite}Checks"
     }
     tasks.named('check') {
         dependsOn verification

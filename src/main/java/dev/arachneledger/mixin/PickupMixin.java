@@ -1,7 +1,7 @@
 package dev.arachneledger.mixin;
 
-import dev.arachneledger.ArachneLedger;
-import dev.arachneledger.ItemIds;
+import dev.arachneledger.client.ArachneLedger;
+import dev.arachneledger.skyblock.ItemIds;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;

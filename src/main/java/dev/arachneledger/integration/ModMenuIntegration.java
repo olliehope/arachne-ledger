@@ -3,7 +3,7 @@ package dev.arachneledger.integration;
 import com.terraformersmc.modmenu.api.ConfigScreenFactory;
 import com.terraformersmc.modmenu.api.ModMenuApi;
 
-import dev.arachneledger.SettingsScreen;
+import dev.arachneledger.ui.screen.SettingsScreen;
 
 /** Loaded through Mod Menu's optional entrypoint, keeping its API out of normal initialization. */
 public final class ModMenuIntegration implements ModMenuApi {
