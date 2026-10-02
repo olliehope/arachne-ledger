@@ -1,0 +1,7 @@
+{
+  "required": true,
+  "package": "dev.arachneledger.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": ["PickupMixin"],
+  "injectors": {"defaultRequire": 1}
+}

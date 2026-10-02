@@ -1,0 +1,30 @@
+name: Bug report
+description: Report incorrect tracking, UI or crashes.
+body:
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Minecraft, Fabric Loader, Fabric API and Arachne Ledger versions.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Steps to reproduce, expected behavior and actual result.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Relevant message lines, screenshot, other mods and /arachne debug output. Remove player names, account IDs and tokens; do not attach your entire config directory.
+  - type: dropdown
+    id: tracking
+    attributes:
+      label: Tracking mode
+      options:
+        - Automatic Sanctuary detection
+        - Manual tracking
+        - Not applicable

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "arachneledger",
+  "version": "${version}",
+  "name": "Arachne Ledger",
+  "description": "Arachne loot, crystal costs, session and lifetime profit, hourly rates and graphs.",
+  "authors": ["Arachne Ledger contributors"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {"client": ["dev.arachneledger.ArachneLedger"]},
+  "mixins": ["arachneledger.mixins.json"],
+  "depends": {"fabricloader": ">=${fabric_loader_version}", "minecraft": "${minecraft_version}", "java": ">=25", "fabric-api": ">=${fabric_api_min_version}"}
+}

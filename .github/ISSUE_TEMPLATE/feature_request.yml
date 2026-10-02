@@ -1,0 +1,15 @@
+name: Feature request
+description: Suggest an improvement.
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What would this help you do?
+      description: Describe the farming problem or missing information.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Suggested behavior
+      description: Include an example of the HUD, command or result you would expect.

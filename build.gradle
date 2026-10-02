@@ -1,0 +1,111 @@
+plugins { id 'net.fabricmc.fabric-loom' version '1.17.20' }
+base { archivesName = 'arachne-ledger' }
+repositories { mavenCentral() }
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+}
+java {
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
+    withSourcesJar()
+}
+tasks.withType(JavaCompile).configureEach { options.release = 25; options.encoding = 'UTF-8' }
+processResources {
+    inputs.property 'version', project.version
+    def metadata = [version: project.version, minecraft_version: minecraft_version,
+        fabric_loader_version: fabric_loader_version,
+        fabric_api_min_version: fabric_api_version.split('\\+')[0]]
+    inputs.properties metadata
+    filesMatching('fabric.mod.json') { expand metadata }
+}
+// Main-method regression suites intentionally run through `check`, without a game server.
+['Tracker', 'Analytics', 'LocationDetection', 'Integration', 'LootLabels', 'LootTracking', 'Fight', 'History', 'Bazaar', 'RngAlerts', 'LootDeduplicator', 'Spawn', 'PurseCoins', 'Valuation', 'BazaarModes', 'Graph', 'T2Spawn', 'PetReward'].each { suite ->
+    def verification = tasks.register("verify${suite}", JavaExec) {
+        dependsOn testClasses
+        classpath = sourceSets.test.runtimeClasspath
+        mainClass = "dev.arachneledger.${suite}Checks"
+    }
+    check.dependsOn verification
+}
+tasks.named('test') { enabled = false }
+jar { from('LICENSE') }
+
+def releaseVersion = project.version.toString()
+def gameVersion = minecraft_version.toString()
+def releaseLocation = layout.buildDirectory.dir('release')
+def changelogFile = layout.projectDirectory.file('CHANGELOG.md').asFile
+def jarArtifact = tasks.named('jar', Jar).flatMap { it.archiveFile }
+def tagEnvironment = providers.environmentVariable('RELEASE_TAG')
+def readReleaseNotes = { String changelog ->
+    String heading = /^## \[${java.util.regex.Pattern.quote(releaseVersion)}\][^\r\n]*\r?\n/
+    def match = java.util.regex.Pattern.compile(heading, java.util.regex.Pattern.MULTILINE).matcher(changelog)
+    if (!match.find()) throw new GradleException("CHANGELOG.md needs a ## [${releaseVersion}] section.")
+    String notes = changelog.substring(match.end()).split('(?m)^## ', 2)[0].trim()
+    if (!notes || notes.contains('TODO')) throw new GradleException('Release notes must describe the completed changes.')
+    notes
+}
+
+// Include only reviewable project files. Local Minecraft/account data must never be published.
+def sourceArchiveTask = tasks.register('releaseSourceZip', Zip) {
+    archiveFileName = "arachne-ledger-${releaseVersion}-source.zip"
+    destinationDirectory = releaseLocation
+    into('arachne-ledger') {
+        from(projectDir) {
+            include 'src/**', 'gradle/**', 'docs/**', '.github/**'
+            include 'build.gradle', 'settings.gradle', 'gradle.properties', 'gradlew', 'gradlew.bat'
+            include 'README.md', 'LICENSE', 'CHANGELOG.md', 'CONTRIBUTING.md'
+            include '.gitignore', '.gitattributes', '.editorconfig'
+        }
+    }
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+def sourceArtifact = sourceArchiveTask.flatMap { it.archiveFile }
+
+tasks.register('verifyReleaseMetadata') {
+    dependsOn jar
+    doLast {
+        if (!(releaseVersion ==~ /\d+\.\d+(?:\.\d+)?(?:-[0-9A-Za-z.-]+)?/)) {
+            throw new GradleException('Use a numeric release version in gradle.properties, for example 1.8 or 1.8.1.')
+        }
+        String releaseTag = tagEnvironment.orNull
+        if (releaseTag && releaseTag != "v${releaseVersion}") {
+            throw new GradleException("Tag ${releaseTag} does not match version v${releaseVersion}.")
+        }
+        readReleaseNotes(changelogFile.getText('UTF-8'))
+        try (def archive = new java.util.zip.ZipFile(jarArtifact.get().asFile)) {
+            def metadata = new groovy.json.JsonSlurper().parseText(archive.getInputStream(archive.getEntry('fabric.mod.json')).getText('UTF-8'))
+            if (metadata.version != releaseVersion || metadata.environment != 'client' || metadata.depends.minecraft != gameVersion) {
+                throw new GradleException('The packaged mod metadata does not match the release.')
+            }
+            for (def entry : Collections.list(archive.entries())) {
+                if (entry.name.contains('SmokeTest') || entry.name.contains('ledger_smoke') || entry.name.startsWith('net/minecraft/')) {
+                    throw new GradleException("Development/game content found in the release: ${entry.name}")
+                }
+            }
+        }
+    }
+}
+
+tasks.register('prepareRelease') {
+    group = 'distribution'
+    description = 'Build, check and prepare the installable JAR, source ZIP, release notes and SHA-256 checksums.'
+    dependsOn build, releaseSourceZip, verifyReleaseMetadata
+    doLast {
+        File releaseDir = releaseLocation.get().asFile
+        releaseDir.mkdirs()
+        File releaseJar = new File(releaseDir, jarArtifact.get().asFile.name)
+        java.nio.file.Files.copy(jarArtifact.get().asFile.toPath(), releaseJar.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        String notes = readReleaseNotes(changelogFile.getText('UTF-8'))
+        new File(releaseDir, 'notes.md').setText(notes + "\n\nMinecraft Java ${gameVersion} · Fabric · Java 25+.\n", 'UTF-8')
+        List<File> assets = [releaseJar, sourceArtifact.get().asFile]
+        String checksums = assets.collect { asset ->
+            String hash = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance('SHA-256').digest(asset.bytes))
+            "${hash}  ${asset.name}"
+        }.join('\n') + '\n'
+        new File(releaseDir, 'SHA256SUMS').setText(checksums, 'UTF-8')
+        logger.lifecycle("Release assets prepared in ${releaseDir}")
+    }
+}
