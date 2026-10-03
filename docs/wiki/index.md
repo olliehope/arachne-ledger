@@ -2,7 +2,7 @@
 
 A client-side **Hypixel SkyBlock Arachne profit tracker** for **Minecraft Java 26.1.2 with Fabric**. Track loot, Crystal and Calling costs, Scavenger coins, net profit, and coins per hour while farming in Arachne's Sanctuary.
 
-The dashboard and customizable HUD show session or lifetime earnings, hourly projections, and profit graphs. Achievements, session recaps, personal records, and fight history help you follow your progress.
+The dashboard and customizable HUD show session or lifetime earnings, hourly projections, and profit graphs. The Loot ledger layout aligns item quantities and values, with observed RNG rates for pets and fangs. Pedestal countdowns, 23 achievements, RNG history, session recaps, and personal records help you follow each farming session.
 
 ## Start here
 
@@ -13,6 +13,7 @@ The dashboard and customizable HUD show session or lifetime earnings, hourly pro
 - [Settings](settings.md): HUD layouts, visible rows, prices, salvage, and notifications.
 - [Tracking and profit](tracking-and-profit.md): timing, damage qualification, graphs, recaps, records, and corrections.
 - [Achievements](achievements.md): milestone tiers, detected progress, and unlock messages.
+- [Farming cues and RNG history](farming.md): estimated pedestal timing, local alerts, pet and fang intervals, and dry runs.
 - [Diagnostics](diagnostics.md): detection decisions and local bug reports.
 - [Troubleshooting](troubleshooting.md): missing locations, rewards, titles, and save errors.
 - [Development](development.md): building the mod and finding the relevant code.

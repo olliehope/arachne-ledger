@@ -4,6 +4,7 @@ import dev.arachneledger.config.Config;
 import dev.arachneledger.config.HudPreferences;
 import dev.arachneledger.config.HudRowOrder;
 import dev.arachneledger.config.Store;
+import dev.arachneledger.ledger.FightRecord;
 import dev.arachneledger.ledger.Ledger;
 import dev.arachneledger.skyblock.Catalog;
 import dev.arachneledger.skyblock.PurseCoins;
@@ -47,6 +48,7 @@ public final class HudContentChecks {
 
     private static Tracker emptyTracker(Path directory) {
         Tracker tracker = new Tracker(directory);
+        tracker.config.hudPreferences.applyPreset(HudPreferences.Layout.MINIMAL);
         tracker.account("hud-fixture");
         tracker.updateLocation(true, true, true, "Arachne's Sanctuary", "fixture", BASE);
         tracker.tick(BASE, true);
@@ -111,6 +113,7 @@ public final class HudContentChecks {
         cyclingPreservesChoices(root.resolve("cycling"));
         customRowOrder(root.resolve("order"));
         profitWithoutRng(root.resolve("without-rng"));
+        lootLedgerContent(root.resolve("loot-ledger"));
         System.out.println("PASS: " + checks + " HUD content, selection, scope and layout checks.");
     }
 
@@ -527,12 +530,16 @@ public final class HudContentChecks {
         config.hudScale = 1.25;
         List<Ledger.Entry> receipts = List.copyOf(tracker.ledger.entries);
         HudContent.Snapshot initial = HudContent.build(tracker);
+        boolean initialHourly = preferences.showProfitPerHour;
         List<String> initialOrder = List.copyOf(preferences.rowOrder);
 
         List<HudPreferences.Layout> expectedLayouts =
                 List.of(
-                        HudPreferences.Layout.CLASSIC, HudPreferences.Layout.SPLIT,
-                        HudPreferences.Layout.SPLIT, HudPreferences.Layout.MINIMAL);
+                        HudPreferences.Layout.CLASSIC,
+                        HudPreferences.Layout.SPLIT,
+                        HudPreferences.Layout.LOOT,
+                        HudPreferences.Layout.LOOT,
+                        HudPreferences.Layout.MINIMAL);
         for (int cycle = 0; cycle < expectedLayouts.size(); cycle++) {
             tracker.cycleView();
             same(
@@ -540,13 +547,26 @@ public final class HudContentChecks {
                     preferences.layout,
                     "HUD cycling selects its expected arrangement");
             same(
-                    cycle == 2 ? Config.View.GRAPH : Config.View.DETAILED,
+                    cycle == 3 ? Config.View.GRAPH : Config.View.DETAILED,
                     config.hudView,
                     "HUD cycling includes graph and returns to text");
-            same(
-                    initial,
-                    HudContent.build(tracker),
-                    "Arrangement cycling preserves every selected text row and item");
+            if (preferences.layout != HudPreferences.Layout.LOOT) {
+                same(
+                        initial,
+                        HudContent.build(tracker),
+                        "Arrangement cycling preserves every selected text row and item");
+            } else {
+                same(
+                        initial.rewards().stream().map(HudContent.Row::id).toList(),
+                        HudContent.build(tracker).rewards().stream()
+                                .map(HudContent.Row::id)
+                                .toList(),
+                        "Loot arrangement preserves selected rewards and their order");
+                same(
+                        initialHourly,
+                        preferences.showProfitPerHour,
+                        "Loot arrangement preserves the hourly visibility choice");
+            }
             same(
                     HudPreferences.Sort.NAME,
                     preferences.sort,
@@ -631,11 +651,25 @@ public final class HudContentChecks {
                 "Custom summary order stays separate from reward keys in the same saved list");
         for (HudPreferences.Layout layout : HudPreferences.Layout.values()) {
             preferences.layout = layout;
+            HudContent.Snapshot actual = HudContent.build(tracker);
             same(
-                    ordered,
-                    HudContent.build(tracker),
-                    "Changing to " + layout + " preserves the selected row order");
+                    ordered.rewards().stream().map(HudContent.Row::id).toList(),
+                    actual.rewards().stream().map(HudContent.Row::id).toList(),
+                    "Changing to " + layout + " preserves the selected reward row order");
+            same(
+                    ordered.metrics().stream()
+                            .map(HudContent.Row::id)
+                            .filter(
+                                    id ->
+                                            layout != HudPreferences.Layout.LOOT
+                                                    || !id.equals("hourly"))
+                            .toList(),
+                    actual.metrics().stream().map(HudContent.Row::id).toList(),
+                    "Changing to "
+                            + layout
+                            + " preserves summary order while combining hourly profit");
         }
+        preferences.layout = HudPreferences.Layout.CLASSIC;
         preferences.showKills = false;
         preferences.hiddenItems.add("SOUL_STRING");
         same(
@@ -674,6 +708,157 @@ public final class HudContentChecks {
                 List.of("kills", "emptyLoot"),
                 HudContent.build(empty).rewards().stream().map(HudContent.Row::id).toList(),
                 "The empty-loot placeholder follows the same movable block order");
+    }
+
+    private static String compactText(HudContent.Row row) {
+        return row.parts().stream().map(HudContent.Part::text).reduce("", String::concat);
+    }
+
+    private static FightRecord countedFight(Ledger ledger) {
+        FightRecord fight = ledger.beginFight(BASE + ledger.activeMillis, 10_000);
+        advance(ledger, 10_000);
+        fight.died = BASE + ledger.activeMillis;
+        fight.activeEnd = ledger.activeMillis;
+        fight.damage = 100_000;
+        fight.outcome = FightRecord.Outcome.COUNTED;
+        ledger.add(Ledger.Kind.KILL, "ARACHNE", 1, 0, "server", fight.died, fight.id);
+        return fight;
+    }
+
+    private static void lootLedgerContent(Path directory) {
+        Tracker tracker = emptyTracker(directory);
+        HudPreferences preferences = tracker.config.hudPreferences;
+        preferences.applyPreset(HudPreferences.Layout.LOOT);
+        FightRecord epic = countedFight(tracker.ledger);
+        tracker.ledger.add(
+                Ledger.Kind.LOOT, "TARANTULA_EPIC", 2, 2_000, "pet_claim", epic.died, epic.id);
+        FightRecord legendary = countedFight(tracker.ledger);
+        tracker.ledger.add(
+                Ledger.Kind.LOOT,
+                "TARANTULA_LEGENDARY",
+                1,
+                100_000,
+                "armor_stand",
+                legendary.died,
+                legendary.id);
+        FightRecord fang = countedFight(tracker.ledger);
+        tracker.ledger.add(
+                Ledger.Kind.LOOT, "ARACHNE_FANG", 3, 500, "armor_stand", fang.died, fang.id);
+        add(tracker.ledger, Ledger.Kind.LOOT, "SOUL_STRING", 2, 5_000);
+        add(tracker.ledger, Ledger.Kind.INCOME, PurseCoins.ITEM, 1, 317);
+        tracker.ledger.add(
+                Ledger.Kind.LOOT,
+                "ESSENCE_SPIDER",
+                8,
+                0,
+                "armor_stand",
+                BASE + tracker.ledger.activeMillis,
+                0,
+                true);
+        List<Ledger.Entry> receipts = List.copyOf(tracker.ledger.entries);
+        Ledger.Stats totals = tracker.ledger.stats(false);
+        HudContent.Snapshot content = HudContent.build(tracker);
+        HudContent.Row pet = row(content, "loot:TARANTULA_EPIC");
+        same(
+                "4.0k",
+                pet.value(),
+                "The leading item amount is total recorded revenue, not unit price");
+        same(
+                "Tarantula Pet (Epic): 2 (66.67%)",
+                compactText(pet), "Epic quantity has its own observed rate over qualifying kills");
+        same(
+                "Tarantula Pet (Legendary): 1 (33.33%)",
+                compactText(row(content, "loot:TARANTULA_LEGENDARY")),
+                "Legendary rarity has an independent observed rate");
+        same(
+                "Arachne's Fang: 3 (100.00%)",
+                compactText(row(content, "loot:ARACHNE_FANG")),
+                "Fang rates use detected quantities");
+        same(
+                Hud.itemColor("TARANTULA_EPIC"),
+                pet.parts().getFirst().color(),
+                "Pet names use rarity color");
+        same(0xFF55FFFF, pet.parts().get(1).color(), "Quantities have a separate cyan color");
+        immutable(() -> pet.parts().clear(), "Colored row segments are immutable");
+        same(
+                "Soul String: 2",
+                compactText(row(content, "loot:SOUL_STRING")),
+                "Ordinary materials have no observed rare-rate suffix");
+        same(
+                "",
+                row(content, "loot:ESSENCE_SPIDER").value(),
+                "Excluded essence never invents a coin value");
+        same(
+                "Spider Essence: 8",
+                compactText(row(content, "loot:ESSENCE_SPIDER")),
+                "Zero-valued loot retains its quantity");
+        same(
+                "3 [360.0/hr]",
+                row(content, "kills").value(),
+                "Boss totals combine their active hourly rate");
+        same(
+                "Coins",
+                row(content, "scavenger").label(),
+                "The compact coins row is Scavenger income");
+        same("317", row(content, "scavenger").value(), "Coins retain their recorded subtotal");
+        same(
+                "Playtime",
+                row(content, "activeTime").label(),
+                "Compact playtime still means active time");
+        yes(
+                row(content, "profit").value().endsWith("/hr]"),
+                "Profit and its hourly rate share a compact line");
+        yes(
+                content.metrics().stream().noneMatch(metric -> metric.id().equals("hourly")),
+                "An inline hourly rate does not create a duplicate summary row");
+        same(
+                300,
+                Hud.panelWidth(tracker.config),
+                "The ledger accommodates a leading subtotal and rare suffix");
+
+        preferences.showTotalProfit = false;
+        same(
+                Format.coins(totals.hourly()),
+                row(HudContent.build(tracker), "hourly").value(),
+                "Hiding profit keeps independently enabled hourly profit");
+        preferences.showTotalProfit = true;
+        preferences.showProfitPerHour = false;
+        same(
+                Format.coins(totals.profit()),
+                row(HudContent.build(tracker), "profit").value(),
+                "Hourly profit can be hidden independently");
+        preferences.showKillsPerHour = false;
+        same(
+                "3",
+                row(HudContent.build(tracker), "kills").value(),
+                "Boss hourly rate can be hidden independently");
+        preferences.showRareRates = false;
+        same(
+                "Tarantula Pet (Epic): 2",
+                compactText(row(HudContent.build(tracker), "loot:TARANTULA_EPIC")),
+                "Rare percentages can be hidden without hiding quantities");
+        preferences.showLootValues = false;
+        same(
+                "",
+                row(HudContent.build(tracker), "loot:TARANTULA_EPIC").value(),
+                "Item coin subtotals can be hidden independently");
+        same(
+                receipts,
+                tracker.ledger.entries,
+                "The ledger layout never changes financial receipts");
+        same(totals, tracker.ledger.stats(false), "The ledger layout preserves recorded totals");
+
+        Tracker noKills = emptyTracker(directory.resolve("no-kills"));
+        noKills.config.hudPreferences.applyPreset(HudPreferences.Layout.LOOT);
+        add(noKills.ledger, Ledger.Kind.LOOT, "TARANTULA_EPIC", 1, 2_000);
+        same(
+                "Tarantula Pet (Epic): 1",
+                compactText(row(HudContent.build(noKills), "loot:TARANTULA_EPIC")),
+                "An unknown denominator never displays an invented percentage");
+        same(
+                "0 [--/hr]",
+                row(HudContent.build(noKills), "kills").value(),
+                "An empty active clock never displays an infinite boss rate");
     }
 
     private static void profitWithoutRng(Path directory) {

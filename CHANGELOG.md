@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.0
+
+- Added the aligned Loot ledger HUD layout, with observed rates for pets and fangs only. New settings use this layout; saved layouts and individual row choices are kept.
+- Added a pedestal spawn countdown after Crystal and Calling placements, configurable fallback delays, adaptive Crystal timing, and optional elapsed fight time. Countdown estimates never record a spawn or change active time.
+- Added RNG history with Session/Total scope, detected pet and fang quantities, kill and active-time intervals, observed rates, and longest dry runs.
+- Added six dry-streak achievements, bringing the catalog to 23. Existing history fills new milestones silently.
+- Updated achievement chat to clickable, colored unlock messages with descriptions on hover; added rare-drop interval chat and compact kill summaries with full details on hover.
+- Added Farming cues settings for pedestal labels and independent local titles, sounds, and chat choices. Changes stay in a draft until Save.
+
 ## 1.2.1
 
 - Filled base loot prices with NPC sale values and Tarantula pet prices from George.

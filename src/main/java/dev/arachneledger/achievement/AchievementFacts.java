@@ -3,6 +3,7 @@ package dev.arachneledger.achievement;
 import dev.arachneledger.achievement.AchievementDefinition.Metric;
 import dev.arachneledger.ledger.HistoryIndex;
 import dev.arachneledger.ledger.Ledger;
+import dev.arachneledger.ledger.RngSince;
 
 /** Proven lifetime observations; manual corrections and prices cannot manufacture progression. */
 public record AchievementFacts(
@@ -12,7 +13,29 @@ public record AchievementFacts(
         long pets,
         long fangs,
         long legendaryPets,
-        long fastestKill) {
+        long fastestKill,
+        long petDryStreak,
+        long fangDryStreak) {
+
+    public AchievementFacts(
+            long countedKills,
+            long crystalPlacements,
+            long soulString,
+            long pets,
+            long fangs,
+            long legendaryPets,
+            long fastestKill) {
+        this(
+                countedKills,
+                crystalPlacements,
+                soulString,
+                pets,
+                fangs,
+                legendaryPets,
+                fastestKill,
+                0,
+                0);
+    }
 
     public static AchievementFacts from(Ledger ledger) {
         HistoryIndex.Snapshot history = HistoryIndex.build(ledger);
@@ -56,7 +79,16 @@ public record AchievementFacts(
                 }
             }
         }
-        return new AchievementFacts(countedKills, crystals, silk, pets, fangs, legendary, fastest);
+        return new AchievementFacts(
+                countedKills,
+                crystals,
+                silk,
+                pets,
+                fangs,
+                legendary,
+                fastest,
+                RngSince.longestDryStreak(history, RngSince.Reward.ANY_PET),
+                RngSince.longestDryStreak(history, RngSince.Reward.FANG));
     }
 
     public long value(Metric metric) {
@@ -68,6 +100,8 @@ public record AchievementFacts(
             case FANGS -> fangs;
             case LEGENDARY_PETS -> legendaryPets;
             case FASTEST_KILL -> fastestKill;
+            case PET_DRY_STREAK -> petDryStreak;
+            case FANG_DRY_STREAK -> fangDryStreak;
         };
     }
 

@@ -5,6 +5,7 @@ import dev.arachneledger.config.HudRowOrder;
 import dev.arachneledger.ledger.Analytics;
 import dev.arachneledger.ledger.Ledger;
 import dev.arachneledger.ledger.ProfitBreakdown;
+import dev.arachneledger.ledger.RngSince;
 import dev.arachneledger.skyblock.Catalog;
 import dev.arachneledger.tracking.Tracker;
 
@@ -17,7 +18,24 @@ import java.util.Locale;
  * Builds display rows from journal totals. Hiding a row never removes a receipt or changes a rate.
  */
 public final class HudContent {
-    public record Row(String id, String label, String value, int labelColor, int valueColor) {}
+    /** A text segment lets compact rows retain rarity, quantity and rate colors independently. */
+    public record Part(String text, int color) {}
+
+    public record Row(
+            String id,
+            String label,
+            String value,
+            int labelColor,
+            int valueColor,
+            List<Part> parts) {
+        public Row {
+            parts = List.copyOf(parts);
+        }
+
+        public Row(String id, String label, String value, int labelColor, int valueColor) {
+            this(id, label, value, labelColor, valueColor, List.of());
+        }
+    }
 
     public record Snapshot(List<Row> rewards, List<Row> metrics) {
         public Snapshot {
@@ -28,18 +46,25 @@ public final class HudContent {
 
     public static Snapshot build(Tracker tracker) {
         HudPreferences preferences = tracker.config.hudPreferences;
+        boolean lootLedger = preferences.layout == HudPreferences.Layout.LOOT;
         Ledger.Stats stats = tracker.ledger.stats(tracker.config.total);
         Analytics.Snapshot analytics = tracker.ledger.analytics(tracker.config.total);
         List<Row> rewards = new ArrayList<>();
         List<Row> metrics = new ArrayList<>();
-        addLoot(rewards, preferences, stats, analytics);
+        RngSince.Snapshot rareHistory =
+                lootLedger && preferences.showLoot && preferences.showRareRates
+                        ? tracker.rngSince(tracker.config.total)
+                        : null;
+        addLoot(rewards, preferences, stats, analytics, rareHistory);
         if (preferences.showScavenger) {
             rewards.add(
-                    metric(
+                    displayMetric(
                             "scavenger",
-                            "Scavenger coins",
+                            lootLedger ? "Coins" : "Scavenger coins",
                             Format.coins(tracker.ledger.scavengerCoins(tracker.config.total)),
-                            Hud.GOLD));
+                            Hud.GOLD,
+                            lootLedger,
+                            ""));
         }
         if (preferences.showCrystalCosts) {
             rewards.add(
@@ -58,17 +83,34 @@ public final class HudContent {
                             Graph.RED));
         }
         if (preferences.showKills) {
-            rewards.add(metric("kills", "Bosses killed", Long.toString(stats.kills()), Hud.TITLE));
+            String rate =
+                    lootLedger && preferences.showKillsPerHour
+                            ? stats.elapsed() < 1000
+                                    ? "--"
+                                    : Hud.decimal(stats.kills() * 3_600_000.0 / stats.elapsed())
+                            : "";
+            rewards.add(
+                    displayMetric(
+                            "kills",
+                            lootLedger ? "Total bosses" : "Bosses killed",
+                            Long.toString(stats.kills()),
+                            Hud.TITLE,
+                            lootLedger,
+                            rate));
         }
         if (preferences.showTotalProfit) {
             metrics.add(
-                    metric(
+                    displayMetric(
                             "profit",
-                            "Total profit",
+                            lootLedger ? "Profit" : "Total profit",
                             Format.coins(stats.profit()),
-                            stats.profit() >= 0 ? Graph.GREEN : Graph.RED));
+                            stats.profit() >= 0 ? Graph.GREEN : Graph.RED,
+                            lootLedger,
+                            lootLedger && preferences.showProfitPerHour
+                                    ? stats.elapsed() < 1000 ? "--" : Format.coins(stats.hourly())
+                                    : ""));
         }
-        if (preferences.showProfitPerHour) {
+        if (preferences.showProfitPerHour && !(lootLedger && preferences.showTotalProfit)) {
             metrics.add(
                     metric(
                             "hourly",
@@ -109,11 +151,13 @@ public final class HudContent {
         }
         if (preferences.showActiveTime) {
             metrics.add(
-                    metric(
+                    displayMetric(
                             "activeTime",
-                            "Active time",
+                            lootLedger ? "Playtime" : "Active time",
                             Hud.shortTime(stats.elapsed()),
-                            0xFF55FFFF));
+                            0xFF55FFFF,
+                            lootLedger,
+                            ""));
         }
         if (preferences.showScope) {
             metrics.add(
@@ -178,7 +222,8 @@ public final class HudContent {
             List<Row> rows,
             HudPreferences preferences,
             Ledger.Stats stats,
-            Analytics.Snapshot analytics) {
+            Analytics.Snapshot analytics,
+            RngSince.Snapshot rareHistory) {
         if (!preferences.showLoot || preferences.maxLootRows == 0) {
             return;
         }
@@ -186,6 +231,33 @@ public final class HudContent {
         for (String id : items) {
             double value = analytics.lootRevenue().getOrDefault(id, 0.0);
             String price = preferences.showLootValues && value > 0 ? Format.coins(value) : "";
+            if (preferences.layout == HudPreferences.Layout.LOOT) {
+                List<Part> parts = new ArrayList<>();
+                parts.add(new Part(Catalog.name(id) + ": ", Hud.itemColor(id)));
+                parts.add(
+                        new Part(
+                                String.format(Locale.ROOT, "%,d", stats.loot().get(id)),
+                                0xFF55FFFF));
+                RngSince.Reward rare = rareReward(id);
+                if (rareHistory != null && rare != null && rareHistory.qualifiedKills() > 0) {
+                    parts.add(
+                            new Part(
+                                    String.format(
+                                            Locale.ROOT,
+                                            " (%.2f%%)",
+                                            rareHistory.row(rare).dropsPer100Kills()),
+                                    0xFF55FFFF));
+                }
+                rows.add(
+                        new Row(
+                                "loot:" + id,
+                                Catalog.name(id),
+                                price,
+                                Hud.itemColor(id),
+                                Hud.GOLD,
+                                parts));
+                continue;
+            }
             String label =
                     String.format(Locale.ROOT, "%,dx ", stats.loot().get(id)) + Catalog.name(id);
             rows.add(new Row("loot:" + id, label, price, Hud.itemColor(id), Hud.GOLD));
@@ -203,6 +275,30 @@ public final class HudContent {
 
     private static Row metric(String id, String label, String value, int color) {
         return new Row(id, label, value, Graph.MUTED, color);
+    }
+
+    private static Row displayMetric(
+            String id, String label, String value, int color, boolean compact, String hourly) {
+        if (!compact) {
+            return metric(id, label, value, color);
+        }
+        List<Part> parts = new ArrayList<>();
+        parts.add(new Part(label + ": ", Hud.WHITE));
+        parts.add(new Part(value, color));
+        String rate = hourly.isEmpty() ? "" : " [" + hourly + "/hr]";
+        if (!rate.isEmpty()) {
+            parts.add(new Part(rate, Graph.MUTED));
+        }
+        return new Row(id, label, value + rate, Hud.WHITE, color, parts);
+    }
+
+    private static RngSince.Reward rareReward(String item) {
+        return switch (item) {
+            case "TARANTULA_EPIC" -> RngSince.Reward.EPIC_PET;
+            case "TARANTULA_LEGENDARY" -> RngSince.Reward.LEGENDARY_PET;
+            case "ARACHNE_FANG" -> RngSince.Reward.FANG;
+            default -> null;
+        };
     }
 
     private static String status(Tracker tracker) {

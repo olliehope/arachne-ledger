@@ -11,6 +11,7 @@ import dev.arachneledger.diagnostics.DetectionSnapshot;
 import dev.arachneledger.diagnostics.TrackingDiagnostics;
 import dev.arachneledger.ledger.Ledger;
 import dev.arachneledger.ledger.LedgerCsv;
+import dev.arachneledger.ledger.RngSince;
 import dev.arachneledger.ledger.SessionSummary;
 import dev.arachneledger.skyblock.Catalog;
 import dev.arachneledger.skyblock.LootLabels;
@@ -69,6 +70,8 @@ public final class Tracker {
 
     private final FightReports reports = new FightReports();
     private final TrackingClock clock = new TrackingClock();
+    private final PedestalTimer pedestal = new PedestalTimer();
+    private final FarmingEvents farmingEvents = new FarmingEvents();
     public final TrackingDiagnostics diagnostics = new TrackingDiagnostics();
     private final FightLifecycle fights = new FightLifecycle(clock, reports, diagnostics);
     private final LootDeduplicator lootDeduplicator = new LootDeduplicator();
@@ -78,6 +81,10 @@ public final class Tracker {
     private final Deque<SessionSummary.Snapshot> sessionNotices = new ArrayDeque<>();
     private long purseMenuCooldownUntil;
     private boolean purseMenuOpen;
+    private Ledger rngCachedLedger;
+    private long rngCachedRevision = -1, rngCachedActiveMillis = -1;
+    private boolean rngCachedTotal;
+    private RngSince.Snapshot rngCached;
 
     public record KillSummary(
             long fightMillis,
@@ -206,6 +213,8 @@ public final class Tracker {
         fights.clearRuntime();
         reports.clear();
         rng.clear();
+        pedestal.clear();
+        farmingEvents.clear();
     }
 
     public void updateLocation(
@@ -246,7 +255,7 @@ public final class Tracker {
         fights.expireDamageSummary(now);
         ledgerDirty |= fights.consumeChanges();
         flushReports(now);
-        if (refreshAchievements(now, config.achievementNotifications)) save();
+        if (refreshAchievements(now, achievementAlertsEnabled())) save();
         savePeriodically(now);
     }
 
@@ -354,10 +363,21 @@ public final class Tracker {
         Messages.Event event = Messages.parse(message, playerName);
         switch (event) {
             case SPAWN, ACTIVITY -> {
+                long previousSpawn =
+                        fights.activeFight == null ? 0 : fights.activeFight.history.spawned;
                 fights.observeBossActivity(ledger, config, event, now);
+                if (event == Messages.Event.SPAWN) {
+                    pedestal.clear();
+                    if (previousSpawn == 0
+                            && fights.activeFight != null
+                            && (config.farming.spawnSound || config.farming.spawnTitle)) {
+                        farmingEvents.spawned(now);
+                    }
+                }
                 if (fights.activeFight != null) pickupWindowUntil = now + PICKUP_WINDOW_MILLIS;
             }
             case DOWN -> {
+                pedestal.clear();
                 if (fights.observeBossDeath(ledger, config, now)) {
                     pickupWindowUntil = now + REWARD_WINDOW_MILLIS;
                     rewardWindowUntil = now + REWARD_WINDOW_MILLIS;
@@ -386,7 +406,8 @@ public final class Tracker {
 
     private void observeSummoningCue(String message, long now) {
         // Everyone's completed summon can awaken the boss; only own placements are charged.
-        if (Messages.isSummoning(message) && fights.activeFight == null) {
+        Messages.Summon summon = Messages.summon(message);
+        if (fights.activeFight == null && pedestal.begin(summon, now, config.farming)) {
             clock.summon(now);
             diagnostics.record(
                     now,
@@ -443,6 +464,64 @@ public final class Tracker {
 
     public List<KillSummary> drainKillSummaries() {
         return reports.drain();
+    }
+
+    /** Rendering is an estimate only: it cannot create a spawn, active time, or a kill. */
+    public PedestalTimer.View pedestalTimer(long now) {
+        if (!ready() || config.paused || !inArena) return null;
+        PedestalTimer.View countdown = config.farming.pedestalTimer ? pedestal.view(now) : null;
+        if (countdown != null) return countdown;
+        if (config.farming.pedestalFightTime
+                && fights.activeFight != null
+                && fights.activeFight.history.spawned > 0) {
+            double seconds = Math.max(0, now - fights.activeFight.history.spawned) / 1000.0;
+            return new PedestalTimer.View(
+                    String.format(java.util.Locale.ROOT, "Arachne · %.1fs", seconds),
+                    "Fight time",
+                    0xFF55FFFF,
+                    seconds,
+                    true);
+        }
+        return null;
+    }
+
+    public void observeRitualParticles(long now) {
+        if (ready() && !config.paused && inArena) pedestal.particles(now);
+    }
+
+    public List<FarmingEvents.RareDrop> drainRareDrops() {
+        if (!ready()) {
+            farmingEvents.clear();
+            return List.of();
+        }
+        return farmingEvents.drainRare();
+    }
+
+    public List<FarmingEvents.Spawn> drainSpawnNotices() {
+        return ready() ? farmingEvents.drainSpawns() : List.of();
+    }
+
+    /**
+     * Cache the journal join; live active time updates four display rows rather than scanning
+     * history.
+     */
+    public RngSince.Snapshot rngSince(boolean total) {
+        if (rngCached == null
+                || rngCachedLedger != ledger
+                || rngCachedRevision != ledger.revision()
+                || rngCachedTotal != total) {
+            rngCached = RngSince.calculate(ledger, total);
+            rngCachedLedger = ledger;
+            rngCachedRevision = ledger.revision();
+            rngCachedTotal = total;
+            rngCachedActiveMillis = ledger.activeMillis;
+        } else if (rngCachedActiveMillis != ledger.activeMillis) {
+            rngCached =
+                    RngSince.advanceClock(
+                            rngCached, ledger.activeMillis, total ? 0 : ledger.sessionMillis);
+            rngCachedActiveMillis = ledger.activeMillis;
+        }
+        return rngCached;
     }
 
     /** Observe every tick, even when a short-lived menu falls between sidebar snapshots. */
@@ -577,14 +656,15 @@ public final class Tracker {
     private void recordAcceptedLoot(
             String itemId, long quantity, String source, long now, TrackedFight target) {
         double unitPrice = config.lootPrice(itemId);
-        record(
-                Ledger.Kind.LOOT,
-                itemId,
-                quantity,
-                unitPrice,
-                source,
-                now,
-                target == null ? 0 : target.history.id);
+        Ledger.Entry receipt =
+                record(
+                        Ledger.Kind.LOOT,
+                        itemId,
+                        quantity,
+                        unitPrice,
+                        source,
+                        now,
+                        target == null ? 0 : target.history.id);
         noteReward(target, now);
         diagnostics.record(
                 now,
@@ -594,6 +674,10 @@ public final class Tracker {
                 source + " / fight " + (target == null ? "unknown" : target.history.id));
         if (config.rngTitles) {
             rng.notice(itemId, (int) quantity, unitPrice, now);
+        }
+        if (RngAlerts.rarityColor(itemId) != 0
+                && (config.farming.rngChat || config.farming.rngSound)) {
+            farmingEvents.rare(receipt);
         }
     }
 
@@ -710,6 +794,8 @@ public final class Tracker {
             config.hudPreferences.layout = HudPreferences.Layout.CLASSIC;
         } else if (config.hudPreferences.layout == HudPreferences.Layout.CLASSIC) {
             config.hudPreferences.layout = HudPreferences.Layout.SPLIT;
+        } else if (config.hudPreferences.layout == HudPreferences.Layout.SPLIT) {
+            config.hudPreferences.layout = HudPreferences.Layout.LOOT;
         } else {
             config.hudView = Config.View.GRAPH;
         }
@@ -730,8 +816,7 @@ public final class Tracker {
 
     public void save() {
         ledgerDirty |= fights.consumeChanges();
-        if (ready())
-            refreshAchievements(System.currentTimeMillis(), config.achievementNotifications);
+        if (ready()) refreshAchievements(System.currentTimeMillis(), achievementAlertsEnabled());
         if (!ready() || !ledgerDirty) {
             return;
         }
@@ -746,6 +831,12 @@ public final class Tracker {
     /**
      * New definitions are silently backfilled by the achievement module; live unlocks stay local.
      */
+    private boolean achievementAlertsEnabled() {
+        return config.achievementNotifications
+                || config.farming.achievementSound
+                || config.farming.achievementTitle;
+    }
+
     private boolean refreshAchievements(long now, boolean notify) {
         if (!ready() || achievementRevision == ledger.revision()) return false;
         var update = Achievements.evaluate(ledger, ledger.achievements, now, notify);

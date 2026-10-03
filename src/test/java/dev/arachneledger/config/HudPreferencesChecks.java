@@ -49,13 +49,13 @@ public final class HudPreferencesChecks {
     private static void defaults() {
         Config fresh = new Config();
         fresh.validate();
-        minimal(fresh.hudPreferences, "Fresh settings");
+        lootLedger(fresh.hudPreferences, "Fresh settings");
         same(
                 Config.View.DETAILED,
                 fresh.hudView,
                 "New row preferences do not change the existing view setting");
         same(
-                3,
+                8,
                 fresh.hudPreferences.maxLootRows,
                 "Enabling loot later has a useful default row limit");
         yes(fresh.hudPreferences.hiddenItems.isEmpty(), "New settings do not hide specific items");
@@ -63,9 +63,33 @@ public final class HudPreferencesChecks {
                 !fresh.hudPreferences.showRegularProfit && !fresh.hudPreferences.showRegularPerHour,
                 "Profit without RNG is optional so the default stays small");
         same(
-                HudRowOrder.defaultOrder(),
+                HudRowOrder.lootLedgerOrder(),
                 fresh.hudPreferences.rowOrder,
                 "New HUD rows use the default order");
+    }
+
+    private static void lootLedger(HudPreferences preferences, String context) {
+        same(HudPreferences.Layout.LOOT, preferences.layout, context + " use Loot ledger");
+        yes(
+                preferences.showTitle
+                        && preferences.showLoot
+                        && preferences.showLootValues
+                        && preferences.showRareRates
+                        && preferences.showKillsPerHour
+                        && preferences.showScavenger
+                        && preferences.showKills
+                        && preferences.showTotalProfit
+                        && preferences.showProfitPerHour
+                        && preferences.showActiveTime,
+                context + " show the item ledger and compact footer");
+        yes(
+                !preferences.showProjectedPerHour
+                        && !preferences.showCrystalCosts
+                        && !preferences.showCallingCosts
+                        && !preferences.showScope
+                        && !preferences.showStatus
+                        && !preferences.showUnpricedWarning,
+                context + " keep the optional extra details hidden");
     }
 
     private static void minimal(HudPreferences preferences, String context) {
@@ -100,7 +124,7 @@ public final class HudPreferencesChecks {
                  "graph":{"showSpawns":true,"showActiveTime":false}}
                 """);
         Config migrated = read(file);
-        minimal(migrated.hudPreferences, "Legacy settings without HUD choices");
+        lootLedger(migrated.hudPreferences, "Legacy settings without HUD choices");
         same(Config.View.GRAPH, migrated.view, "Migration keeps the dashboard graph view");
         same(Config.View.GRAPH, migrated.hudView, "Migration keeps the HUD graph view");
         same(0.25, migrated.hudX, "Migration keeps the HUD horizontal position");
@@ -122,16 +146,27 @@ public final class HudPreferencesChecks {
                 "Migration does not copy HUD choices into graph preferences");
         Store.write(file, migrated);
         Config reopened = read(file);
-        minimal(reopened.hudPreferences, "Reopened migrated settings");
+        lootLedger(reopened.hudPreferences, "Reopened migrated settings");
         same(Config.View.GRAPH, reopened.hudView, "The graph view survives migration and save");
 
         Files.writeString(file, "{\"hudPreferences\":null,\"hudView\":\"COMPACT\"}");
         Config explicitNull = read(file);
-        minimal(explicitNull.hudPreferences, "Explicitly null HUD choices");
+        lootLedger(explicitNull.hudPreferences, "Explicitly null HUD choices");
         same(
                 Config.View.COMPACT,
                 explicitNull.hudView,
                 "A null preference repair keeps Compact view");
+
+        Config savedMinimal = new Config();
+        savedMinimal.hudPreferences.applyPreset(HudPreferences.Layout.MINIMAL);
+        savedMinimal.hudPreferences.showRareRates = false;
+        savedMinimal.hudPreferences.showKillsPerHour = false;
+        Store.write(file, savedMinimal);
+        HudPreferences restored = read(file).hudPreferences;
+        minimal(restored, "Explicitly saved Minimal choices");
+        yes(
+                !restored.showRareRates && !restored.showKillsPerHour,
+                "The new constructor never overwrites explicitly saved optional rates");
     }
 
     private static void customPersistence(Path file) throws Exception {
@@ -141,6 +176,8 @@ public final class HudPreferencesChecks {
         preferences.showTitle = false;
         preferences.showLoot = true;
         preferences.showLootValues = false;
+        preferences.showRareRates = false;
+        preferences.showKillsPerHour = false;
         preferences.showScavenger = true;
         preferences.showCrystalCosts = true;
         preferences.showCallingCosts = false;
@@ -194,6 +231,8 @@ public final class HudPreferencesChecks {
                 preferences.showTitle,
                 preferences.showLoot,
                 preferences.showLootValues,
+                preferences.showRareRates,
+                preferences.showKillsPerHour,
                 preferences.showScavenger,
                 preferences.showCrystalCosts,
                 preferences.showCallingCosts,

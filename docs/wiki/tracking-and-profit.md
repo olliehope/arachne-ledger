@@ -17,6 +17,8 @@ Active time begins with a known spawn, includes the fight, and continues for up 
 
 Joining mid-fight can recover tracking from fresh boss activity, but the original spawn time is unknown. Such fights have no known-spawn marker. Pausing, leaving the tracking area, or changing worlds interrupts the current fight.
 
+The optional pedestal countdown is a separate **estimate**, marked with `~`, starting from a detected placement. Adaptive Crystal timing can adjust the estimate using nearby ritual particles; absent observations keep the configured fallback. It stops on the actual spawn signal. A countdown reaching zero never starts the active clock, creates a spawn marker, or counts a kill. See [Farming cues](farming.md#pedestal-countdown) for timing and label settings.
+
 ## Profit and hourly rates
 
 **Net profit = recorded loot value + coin income − all recorded costs.** Values are estimates based on the chosen prices, rather than completed sales. Scavenger income is already included; do not add it again.
@@ -30,6 +32,14 @@ Actual hourly rates divide the selected session or lifetime value by its active 
 **Profit without RNG** uses the same recorded journal and active clock, excluding the loot value of Epic/Legendary Tarantula Pets and Arachne Fangs. It keeps normal loot, Scavenger and other coin income, and all Crystal, Calling, and other costs. These optional HUD rows show a baseline alongside jackpot-inclusive earnings; they do not discard drops or change the graph's existing metrics. Unpriced RNG drops contribute zero to both values.
 
 The graph's projected total extends the selected total by five more active minutes at that recent rate. It does not predict an unseen RNG drop.
+
+**Loot ledger** is the default text HUD for new settings, with aligned loot quantities and recorded values before the money and kill summary. Existing saved layouts and row selections are preserved. Optional rare-drop rates appear beside pets and fangs only; ordinary loot does not have an RNG percentage. Rates use automatically detected reward quantities per qualifying kill, rather than every manually entered item in the financial journal.
+
+## RNG history
+
+**Journal → RNG history** shows Session or Total observations for Any Tarantula pet, Epic pets, Legendary pets, and Arachne's Fang. Each row tracks detected quantity, qualifying kills, kills and active time since the last drop, and the longest dry run. With no drop in the selected scope, it shows the interval since that scope began.
+
+Only rewards associated with qualifying recorded fights contribute. Manual loot and low-damage fights cannot reset a run. Late rewards remain associated with their original fight, preserving later dry kills. Observed drops per 100 kills describe your history and do not predict the next drop. [Dry-run achievements](achievements.md) use the longest lifetime run rather than resetting their earned progress when a reward arrives.
 
 ## Graph
 
@@ -49,7 +59,9 @@ Other marked coin rewards received during farming cannot be distinguished from S
 
 **Adjust** adds a missed drop, coin income, or expense. `/arachne undo` removes the latest current-session entry. `/arachne export` saves a CSV under `config/arachneledger/exports` using the selected scope.
 
-Kill chat summaries are printed after a short collection delay. Later rewards still update totals but do not rewrite an already printed summary.
+Kill chat summaries are printed after a short collection delay. Later rewards still update totals but do not rewrite an already printed summary. **Settings → Farming cues → Chat → Compact kill summary** reduces the visible line to kill number, duration, and net profit; hover for rewards, costs, damage, Scavenger income, and missing values.
+
+Rare-drop chat uses the reward's rarity color, an optional recorded value, and a trusted kill/time interval. Unknown values stay hidden. Spawn, reward, and achievement titles and sounds have independent local controls under **Farming cues**; they do not change financial entries or kill qualification.
 
 ## Session recaps and personal records
 

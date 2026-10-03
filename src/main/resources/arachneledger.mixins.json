@@ -2,6 +2,6 @@
   "required": true,
   "package": "dev.arachneledger.mixin",
   "compatibilityLevel": "JAVA_25",
-  "client": ["PickupMixin"],
+  "client": ["PickupMixin", "RitualParticlesMixin"],
   "injectors": {"defaultRequire": 1}
 }

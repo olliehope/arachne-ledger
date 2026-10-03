@@ -100,6 +100,11 @@ public final class HudOptionsScreen extends SettingsListScreen {
                         "Show the recorded value beside each visible item quantity.",
                         () -> preferences.showLootValues = !preferences.showLootValues),
                 toggle(
+                        "Observed rare rates",
+                        preferences.showRareRates,
+                        "Loot ledger only: show detected Epic Pet, Legendary Pet and Fang quantities per 100 qualifying kills. These are observed results, not the chance of the next drop.",
+                        () -> preferences.showRareRates = !preferences.showRareRates),
+                toggle(
                         "Scavenger coins",
                         preferences.showScavenger,
                         "Show recorded Scavenger coin income. This display toggle does not enable or disable collection.",
@@ -119,6 +124,11 @@ public final class HudOptionsScreen extends SettingsListScreen {
                         preferences.showKills,
                         "Show counted kills that meet the participation threshold.",
                         () -> preferences.showKills = !preferences.showKills),
+                toggle(
+                        "Bosses / hour",
+                        preferences.showKillsPerHour,
+                        "Loot ledger only: append kills per active hour to the total bosses row.",
+                        () -> preferences.showKillsPerHour = !preferences.showKillsPerHour),
                 toggle(
                         "Active time",
                         preferences.showActiveTime,
@@ -147,7 +157,10 @@ public final class HudOptionsScreen extends SettingsListScreen {
                         tracker.error.isEmpty(),
                         "Restore the default stat order. Row visibility, loot sorting and item filters are kept.",
                         () -> {
-                            preferences.rowOrder = HudRowOrder.defaultOrder();
+                            preferences.rowOrder =
+                                    preferences.layout == HudPreferences.Layout.LOOT
+                                            ? HudRowOrder.lootLedgerOrder()
+                                            : HudRowOrder.defaultOrder();
                             changed();
                         }));
         for (HudRowOrder.Group group : HudRowOrder.Group.values()) {
@@ -274,7 +287,7 @@ public final class HudOptionsScreen extends SettingsListScreen {
                         preferences.layout.label(),
                         false,
                         tracker.error.isEmpty(),
-                        "Cycle Minimal, Classic and Split while preserving every individual selection. This selects the text HUD.",
+                        "Cycle Loot ledger, Minimal, Classic and Split while preserving every individual selection. This selects the text HUD.",
                         () -> {
                             HudPreferences.Layout[] choices = HudPreferences.Layout.values();
                             preferences.layout =
@@ -284,6 +297,7 @@ public final class HudOptionsScreen extends SettingsListScreen {
                         }));
         for (HudPreferences.Layout preset :
                 new HudPreferences.Layout[] {
+                    HudPreferences.Layout.LOOT,
                     HudPreferences.Layout.MINIMAL,
                     HudPreferences.Layout.CLASSIC,
                     HudPreferences.Layout.SPLIT

@@ -22,7 +22,7 @@ public final class JournalScreen extends Screen {
     protected void init() {
         panelWidth = Math.min(340, width - 24);
         x = (width - panelWidth) / 2;
-        y = (height - 200) / 2;
+        y = Math.max(4, (height - 218) / 2);
         addRenderableWidget(
                 new FlatButton(
                         x + 12,
@@ -47,11 +47,20 @@ public final class JournalScreen extends Screen {
                         y + 118,
                         panelWidth - 24,
                         22,
+                        "RNG history",
+                        false,
+                        () -> minecraft.setScreen(new RngStatsScreen(this))));
+        addRenderableWidget(
+                new FlatButton(
+                        x + 12,
+                        y + 150,
+                        panelWidth - 24,
+                        22,
                         "Tracking diagnostics",
                         false,
                         () -> minecraft.setScreen(new DiagnosticsScreen(this))));
         addRenderableWidget(
-                new FlatButton(x + 12, y + 170, panelWidth - 24, 20, "Back", false, this::onClose));
+                new FlatButton(x + 12, y + 194, panelWidth - 24, 20, "Back", false, this::onClose));
     }
 
     @Override

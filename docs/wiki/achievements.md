@@ -1,6 +1,6 @@
 # Achievements
 
-Open **Journal → Achievements** from the dashboard or run `/arachne achievements`. The achievement book has **17 unlocks**, grouped into Hunting, Summoning, Collection, Rare drops, and Speed. Progress is lifetime for the selected account/profile, independent of the dashboard's Session/Total choice.
+Open **Journal → Achievements** from the dashboard or run `/arachne achievements`. The achievement book has **23 unlocks**, grouped into Hunting, Summoning, Collection, Rare drops, and Speed. Progress is lifetime for the selected account/profile, independent of the dashboard's Session/Total choice.
 
 Use **All**, **In progress**, or **Unlocked** to filter entries. The category button cycles categories; scroll or use the arrow buttons to browse. Each visible milestone shows its description and progress. Hover for the full details and unlock date.
 
@@ -11,6 +11,8 @@ Use **All**, **In progress**, or **Unlocked** to filter entries. The category bu
 | Silk Merchant I–III | 1,000 / 10,000 / 100,000 detected Soul String |
 | Lucky Legs | Your first detected Tarantula Pet |
 | Fang Collector I–III | 1 / 10 / 100 detected Arachne Fangs |
+| Looking for a Pet I–III | 100 / 500 / 1,000 consecutive qualifying fights without a Tarantula Pet |
+| Fangless I–III | 50 / 100 / 250 consecutive qualifying fights without an Arachne Fang |
 | Speed Weaver I–III | A qualifying, confirmed timed fight in 60 / 45 / 30 seconds or less |
 | Hidden milestone | Discover a rare pet milestone to reveal its name and goal |
 
@@ -22,10 +24,18 @@ Summoner counts your server-confirmed Crystal placements, including receipts tha
 
 Collection and rare-drop goals use detected loot quantities, including rewards from fights skipped for damage. Manual additions and manually replaced fight drops do not manufacture progress. Prices do not affect any achievement.
 
+Dry-run milestones use the **longest historical run** of qualifying fights without the target reward. Either pet rarity resets the pet run. A fight that drops the target reward is not a dry kill. Manual drops and rewards from low-damage fights do not reset these runs; low-damage fights do not add dry kills. Legacy aggregate kills without associated fight history cannot establish an ordered dry run. See [RNG history](farming.md#rng-history) for current intervals and separate rarity histories.
+
 ## History and notifications
 
 Existing saved observations fill achievements silently on the first load. Imported unlocks have no invented date; their tooltip says **Imported from saved history**. Newly added achievement definitions also fill from existing history without replaying old notifications.
 
-New live unlocks can print a local notification after their state is saved. Turn **Achievement chat** off in **Settings → Tracking** to hide these messages. Unlocks still progress and are acknowledged while notifications are off, so enabling the setting does not replay them.
+New live unlocks can print a local message after their state is saved:
+
+```text
+[Arachne] Achievement Unlocked >> Looking for a Pet I
+```
+
+Hover for the category and objective, or click to open the achievement book. **Settings → Tracking → Achievement chat** controls the message. **Settings → Farming cues → Alerts** independently controls achievement titles and sounds. Unlocks still progress and are acknowledged when cues are off, so enabling them does not replay earlier milestones.
 
 Earned achievements stay earned if receipts are later corrected or removed. Progress toward locked goals follows the remaining trusted observations. [Personal records](tracking-and-profit.md#session-recaps-and-personal-records) are recalculated from current receipts instead.

@@ -14,7 +14,8 @@ public final class HudPreferences {
     public enum Layout {
         CLASSIC("Classic"),
         MINIMAL("Minimal"),
-        SPLIT("Split");
+        SPLIT("Split"),
+        LOOT("Loot ledger");
 
         private final String label;
 
@@ -46,10 +47,12 @@ public final class HudPreferences {
     public Layout layout = Layout.MINIMAL;
     public Sort sort = Sort.VALUE;
 
-    // Minimal keeps the money summary and tracking state visible. Every row remains optional.
+    // The constructor supplies the fresh preset; Gson restores existing individual choices.
     public boolean showTitle = true;
     public boolean showLoot = false;
     public boolean showLootValues = true;
+    public boolean showRareRates = true;
+    public boolean showKillsPerHour = true;
     public boolean showScavenger = false;
     public boolean showCrystalCosts = false;
     public boolean showCallingCosts = false;
@@ -73,32 +76,39 @@ public final class HudPreferences {
     /** Stable stat keys; the loot list moves as one block and preserves its own sort order. */
     public List<String> rowOrder = HudRowOrder.defaultOrder();
 
+    public HudPreferences() {
+        applyPreset(Layout.LOOT);
+    }
+
     /** Restore a complete preset, including loot sorting and individual item visibility. */
     public void applyPreset(Layout preset) {
         layout = preset == null ? Layout.MINIMAL : preset;
         boolean classic = layout == Layout.CLASSIC;
+        boolean lootLedger = layout == Layout.LOOT;
         boolean expanded = layout != Layout.MINIMAL;
 
         showTitle = true;
         showLoot = expanded;
         showLootValues = true;
-        showScavenger = classic;
+        showRareRates = true;
+        showKillsPerHour = true;
+        showScavenger = classic || lootLedger;
         showCrystalCosts = classic;
         showCallingCosts = classic;
         showKills = expanded;
         showTotalProfit = true;
         showProfitPerHour = true;
-        showProjectedPerHour = true;
+        showProjectedPerHour = !lootLedger;
         showRegularProfit = false;
         showRegularPerHour = false;
         showActiveTime = expanded;
         showScope = classic;
-        showStatus = true;
+        showStatus = !lootLedger;
         showUnpricedWarning = classic;
         sort = Sort.VALUE;
-        maxLootRows = 3;
+        maxLootRows = lootLedger ? 8 : 3;
         hiddenItems = new LinkedHashSet<>();
-        rowOrder = HudRowOrder.defaultOrder();
+        rowOrder = lootLedger ? HudRowOrder.lootLedgerOrder() : HudRowOrder.defaultOrder();
     }
 
     /** Normalize damaged or older display settings without resetting custom row selections. */

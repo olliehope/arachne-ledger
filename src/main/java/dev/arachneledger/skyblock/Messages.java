@@ -6,6 +6,11 @@ import java.util.regex.Pattern;
 
 /** Anchored server-message parsers. Parsing a message never mutates tracking state. */
 public final class Messages {
+    public enum Summon {
+        CRYSTAL,
+        CALLING
+    }
+
     public enum Event {
         NONE,
         SPAWN,
@@ -54,13 +59,20 @@ public final class Messages {
 
     /** Final summon cues belong to everyone; ownership only determines who pays the cost. */
     public static boolean isSummoning(String text) {
+        return summon(text) != null;
+    }
+
+    /** Return a complete ritual's kind, independent of the player who placed it. */
+    public static Summon summon(String text) {
         Matcher match = PLACED.matcher(clean(text));
         if (!match.matches() || match.group(3) == null) {
-            return false;
+            return null;
         }
-        return match.group(2).equals("Arachne Crystal")
-                ? match.group(4) == null
-                : "4".equals(match.group(4));
+        if (match.group(2).equals("Arachne Crystal") && match.group(4) == null)
+            return Summon.CRYSTAL;
+        return match.group(2).equals("Arachne's Calling") && "4".equals(match.group(4))
+                ? Summon.CALLING
+                : null;
     }
 
     public static Event parse(String text, String player) {

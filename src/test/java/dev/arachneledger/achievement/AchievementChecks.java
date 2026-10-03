@@ -82,7 +82,7 @@ public final class AchievementChecks {
 
     private static void registryAndEmptyState() {
         Set<String> ids = new HashSet<>();
-        eq(17, Achievements.DEFINITIONS.size(), "Registry contains all planned milestones");
+        eq(23, Achievements.DEFINITIONS.size(), "Registry contains all planned milestones");
         for (var definition : Achievements.DEFINITIONS) {
             yes(ids.add(definition.id()), "Every definition has a stable unique ID");
             yes(definition.target() > 0, "Every milestone has a positive target");
@@ -95,7 +95,7 @@ public final class AchievementChecks {
         AchievementState state = fresh(empty);
         var snapshot = Achievements.snapshot(empty, state);
         eq(0, snapshot.earned(), "Empty ledger has no earned milestones");
-        eq(17, snapshot.total(), "Total includes hidden achievements");
+        eq(23, snapshot.total(), "Total includes hidden achievements");
         yes(
                 !progress(empty, state, "pet_legendary").revealed(),
                 "Hidden milestone starts concealed");
@@ -309,11 +309,119 @@ public final class AchievementChecks {
         yes(!definition.reached(0), "Zero duration never qualifies");
     }
 
+    private static void dryStreakMilestones() {
+        Ledger ledger = new Ledger();
+        AchievementState state = fresh(ledger);
+        for (int index = 0; index < 100; index++) {
+            fight(ledger, 90_000, 10_000, FightRecord.Outcome.COUNTED, "server");
+        }
+        FightRecord current = ledger.fights.getLast();
+        add(ledger, Ledger.Kind.LOOT, "TARANTULA_LEGENDARY", 1, 0, "manual", current.id);
+        add(ledger, Ledger.Kind.LOOT, "ARACHNE_FANG", 1, 0, "fight_edit", current.id);
+        FightRecord ignored =
+                fight(ledger, 90_000, 9_999, FightRecord.Outcome.LOW_DAMAGE, "server");
+        add(ledger, Ledger.Kind.LOOT, "TARANTULA_EPIC", 1, 0, "pet_claim", ignored.id);
+        add(ledger, Ledger.Kind.LOOT, "ARACHNE_FANG", 1, 0, "armor_stand", ignored.id);
+        var facts = AchievementFacts.from(ledger);
+        eq(100, facts.petDryStreak(), "Manual pets and low-damage rewards do not reset a dry run");
+        eq(100, facts.fangDryStreak(), "Edited fangs and skipped fights do not reset a dry run");
+        var unlocked = Achievements.evaluate(ledger, state, BASE + 1, true);
+        yes(
+                unlocked.unlocks().stream()
+                        .anyMatch(row -> row.definition().id().equals("pet_dry_100")),
+                "The first pet dry milestone unlocks live");
+        yes(state.earnedAt.containsKey("fang_dry_50"), "The first fang dry milestone unlocks");
+        yes(state.earnedAt.containsKey("fang_dry_100"), "Exact dry threshold unlocks its tier");
+        yes(!state.earnedAt.containsKey("fang_dry_250"), "A later dry tier remains locked");
+
+        FightRecord reward = fight(ledger, 90_000, 10_000, FightRecord.Outcome.COUNTED, "server");
+        add(ledger, Ledger.Kind.LOOT, "TARANTULA_EPIC", 1, 0, "pet_claim", reward.id);
+        add(ledger, Ledger.Kind.LOOT, "ARACHNE_FANG", 1, 0, "armor_stand", reward.id);
+        eq(
+                100,
+                AchievementFacts.from(ledger).petDryStreak(),
+                "A later pet preserves best historical dry progress");
+        eq(
+                100,
+                AchievementFacts.from(ledger).fangDryStreak(),
+                "A later fang preserves best historical dry progress");
+        for (int index = 0; index < 250; index++) {
+            fight(ledger, 90_000, 10_000, FightRecord.Outcome.COUNTED, "server");
+        }
+        eq(
+                250,
+                AchievementFacts.from(ledger).petDryStreak(),
+                "Dry streak restarts after either pet rarity");
+        eq(
+                250,
+                AchievementFacts.from(ledger).fangDryStreak(),
+                "The longest later run becomes progression");
+        Achievements.evaluate(ledger, state, BASE + 2, true);
+        yes(state.earnedAt.containsKey("fang_dry_250"), "The highest fang dry tier unlocks");
+        yes(!state.earnedAt.containsKey("pet_dry_500"), "Pet dry tiers use their own thresholds");
+        eq(
+                0,
+                Achievements.evaluate(ledger, state, BASE + 3, true).unlocks().size(),
+                "Dry achievements notify only once");
+
+        AchievementState oldCatalog = new AchievementState();
+        oldCatalog.initialized = true;
+        oldCatalog.catalogVersion = 1;
+        var migrated = Achievements.evaluate(ledger, oldCatalog, BASE + 4, true);
+        eq(0, migrated.unlocks().size(), "New dry milestones backfill without upgrade chat spam");
+        yes(
+                oldCatalog.earnedAt.containsKey("pet_dry_100"),
+                "Catalog migration retains factual dry progress");
+        eq(
+                0,
+                oldCatalog.earnedAt.get("fang_dry_250"),
+                "Imported dry progress does not invent an unlock date");
+        eq(2, oldCatalog.catalogVersion, "The dry milestone catalog is acknowledged");
+
+        Ledger boundary = new Ledger();
+        for (int index = 0; index < 99; index++) {
+            fight(boundary, 90_000, 10_000, FightRecord.Outcome.COUNTED, "server");
+        }
+        FightRecord hundredth =
+                fight(boundary, 90_000, 10_000, FightRecord.Outcome.COUNTED, "server");
+        add(boundary, Ledger.Kind.LOOT, "TARANTULA_LEGENDARY", 1, 0, "armor_stand", hundredth.id);
+        add(boundary, Ledger.Kind.LOOT, "ARACHNE_FANG", 1, 0, "armor_stand", hundredth.id);
+        eq(
+                99,
+                AchievementFacts.from(boundary).petDryStreak(),
+                "The rewarded fight is not counted as a dry kill");
+        eq(
+                99,
+                AchievementFacts.from(boundary).fangDryStreak(),
+                "A drop on the target fight does not manufacture a dry milestone");
+        AchievementState imported = fresh(boundary);
+        yes(
+                !imported.earnedAt.containsKey("pet_dry_100"),
+                "A reward before 100 dry fights keeps pet milestone locked");
+        yes(
+                !imported.earnedAt.containsKey("fang_dry_100"),
+                "Fang dry thresholds exclude the reward fight");
+
+        Ledger legacy = new Ledger();
+        add(legacy, Ledger.Kind.KILL, "ARACHNE", 2_000, 0, "server", 0);
+        eq(
+                0,
+                AchievementFacts.from(legacy).petDryStreak(),
+                "Legacy aggregate kills do not invent an ordered pet dry run");
+        var compatible = new AchievementFacts(1, 2, 3, 4, 5, 6, 7);
+        eq(
+                0,
+                compatible.petDryStreak(),
+                "The previous facts constructor defaults new dry metrics safely");
+        eq(0, compatible.fangDryStreak(), "Existing callers have no fabricated fang dry progress");
+    }
+
     public static void main(String[] args) throws Exception {
         registryAndEmptyState();
         trustedFactsAndSpeed();
         backfillDeliveryAndPersistence();
         malformedAndFutureState();
+        dryStreakMilestones();
         System.out.println("Achievement checks passed: " + checks);
     }
 }

@@ -11,7 +11,7 @@ import java.util.Set;
 
 /** Data-driven milestones. Evaluation changes only persistent unlock state, never accounting. */
 public final class Achievements {
-    private static final int CATALOG_VERSION = 1;
+    private static final int CATALOG_VERSION = 2;
     public static final List<AchievementDefinition> DEFINITIONS = definitions();
 
     public record Unlock(AchievementDefinition definition, long earnedAt) {
@@ -147,6 +147,22 @@ public final class Achievements {
                         Metric.LEGENDARY_PETS,
                         1,
                         true));
+        tiers(
+                definitions,
+                "pet_dry",
+                "Looking for a Pet",
+                "Complete %s counted Arachne fights in a row without a Tarantula Pet.",
+                Category.RARE,
+                Metric.PET_DRY_STREAK,
+                new long[] {100, 500, 1_000});
+        tiers(
+                definitions,
+                "fang_dry",
+                "Fangless",
+                "Complete %s counted Arachne fights in a row without an Arachne Fang.",
+                Category.RARE,
+                Metric.FANG_DRY_STREAK,
+                new long[] {50, 100, 250});
         long[] seconds = {60, 45, 30};
         for (int index = 0; index < seconds.length; index++) {
             definitions.add(

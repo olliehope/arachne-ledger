@@ -1,5 +1,6 @@
 package dev.arachneledger.client;
 
+import dev.arachneledger.client.render.PedestalTimerRenderer;
 import dev.arachneledger.pricing.BazaarPrices;
 import dev.arachneledger.skyblock.LootLabels;
 import dev.arachneledger.skyblock.Messages;
@@ -61,6 +62,7 @@ public final class ArachneLedger implements ClientModInitializer {
         ClientReceiveMessageEvents.GAME_CANCELED.register(ArachneLedger::receive);
         registerConnectionLifecycle();
         registerOverlays();
+        PedestalTimerRenderer.register();
         registerCommands();
     }
 

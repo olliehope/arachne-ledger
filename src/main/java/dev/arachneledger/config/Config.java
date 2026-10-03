@@ -46,6 +46,7 @@ public final class Config {
     public boolean achievementNotifications = true;
     public boolean sessionRecapChat = true;
     public boolean dashboardFights = false;
+    public FarmingPreferences farming = new FarmingPreferences();
     // Valuation preferences and participation threshold.
     public boolean autoBazaar = false;
     public boolean ironman = false;
@@ -251,6 +252,8 @@ public final class Config {
     }
 
     private void migrateOptionalSettings() {
+        if (farming == null) farming = new FarmingPreferences();
+        farming.validate();
         migrateNpcDefaults();
         migratePrices();
         if (bazaarPrices == null) {
@@ -266,7 +269,7 @@ public final class Config {
             graph = new GraphPreferences();
         }
         graph.validate();
-        // Missing pre-1.1 HUD choices receive the requested Minimal default, without changing
+        // Missing HUD choices receive the current Loot ledger default, without changing
         // an existing graph view, position, scale, or financial settings.
         if (hudPreferences == null) {
             hudPreferences = new HudPreferences();

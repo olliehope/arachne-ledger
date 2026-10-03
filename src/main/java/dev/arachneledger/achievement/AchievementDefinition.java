@@ -34,7 +34,9 @@ public record AchievementDefinition(
         PETS,
         FANGS,
         LEGENDARY_PETS,
-        FASTEST_KILL
+        FASTEST_KILL,
+        PET_DRY_STREAK,
+        FANG_DRY_STREAK
     }
 
     public AchievementDefinition {

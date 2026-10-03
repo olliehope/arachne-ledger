@@ -23,6 +23,7 @@ import java.util.Locale;
 /** The live overlay is independent of the dashboard's selected tab. */
 public final class Hud {
     public static final int WIDTH = 224, WHITE = 0xFFFFFFFF, GOLD = 0xFFFFAA00, TITLE = 0xFFFFFF55;
+    private static final int LOOT_WIDTH = 300;
 
     public record Bounds(int x, int y, int width, int height, float scale) {
         public boolean contains(double mouseX, double mouseY) {
@@ -60,8 +61,16 @@ public final class Hud {
                     splitColumns(config.hudPreferences)
                             ? Math.max(rewards, metrics)
                             : rewards + metrics;
+            var preferences = config.hudPreferences;
+            int lootRows = preferences.showLoot ? preferences.maxLootRows : 0;
+            boolean ledgerGap =
+                    preferences.layout == HudPreferences.Layout.LOOT
+                            && lootRows > 0
+                            && rewards + metrics > lootRows;
             int groupGap =
-                    !splitColumns(config.hudPreferences) && rewards > 0 && metrics > 0 ? 3 : 0;
+                    ledgerGap
+                            ? 6
+                            : !splitColumns(preferences) && rewards > 0 && metrics > 0 ? 3 : 0;
             return Math.max(
                     16, (config.hudPreferences.showTitle ? 15 : 0) + rows * 11 + groupGap + 8);
         }
@@ -204,6 +213,9 @@ public final class Hud {
         if (splitColumns(config.hudPreferences)) {
             return WIDTH * 2 + 8;
         }
+        if (config.hudPreferences.layout == HudPreferences.Layout.LOOT) {
+            return LOOT_WIDTH;
+        }
         return config.hudPreferences.layout == HudPreferences.Layout.MINIMAL ? 200 : WIDTH;
     }
 
@@ -219,7 +231,11 @@ public final class Hud {
         return (preferences.showTotalProfit ? 1 : 0)
                 + (preferences.showRegularProfit ? 1 : 0)
                 + (preferences.showRegularPerHour ? 1 : 0)
-                + (preferences.showProfitPerHour ? 1 : 0)
+                + (preferences.showProfitPerHour
+                                && !(preferences.layout == HudPreferences.Layout.LOOT
+                                        && preferences.showTotalProfit)
+                        ? 1
+                        : 0)
                 + (preferences.showProjectedPerHour ? 1 : 0)
                 + (preferences.showActiveTime ? 1 : 0)
                 + (preferences.showScope ? 1 : 0)
@@ -239,6 +255,10 @@ public final class Hud {
             HudContent.Snapshot content,
             HudPreferences preferences,
             int rowY) {
+        if (preferences.layout == HudPreferences.Layout.LOOT) {
+            drawLootLedger(graphics, font, content, rowY);
+            return;
+        }
         if (splitColumns(preferences)) {
             drawRows(graphics, font, content.rewards(), 0, WIDTH, rowY);
             drawRows(graphics, font, content.metrics(), WIDTH + 8, WIDTH, rowY);
@@ -258,6 +278,80 @@ public final class Hud {
             rowY += 3;
         }
         drawRows(graphics, font, second, 0, columnWidth, rowY);
+    }
+
+    /** Align coin subtotals, then keep item names, counts and observed rare rates on one line. */
+    private static void drawLootLedger(
+            GuiGraphicsExtractor graphics, Font font, HudContent.Snapshot content, int rowY) {
+        int valueWidth =
+                content.rewards().stream()
+                        .filter(row -> row.id().startsWith("loot:"))
+                        .mapToInt(row -> font.width(row.value()))
+                        .max()
+                        .orElse(0);
+        int itemX = valueWidth == 0 ? 4 : 4 + valueWidth + font.width(" | ");
+        boolean previousLoot = false, previousRow = false;
+        for (HudContent.Row row : content.rewards()) {
+            boolean loot = row.id().startsWith("loot:") || row.id().equals("emptyLoot");
+            if (previousRow && loot != previousLoot) {
+                rowY += 3;
+            }
+            if (!loot) {
+                drawLedgerSummary(graphics, font, row, rowY);
+            } else if (row.parts().isEmpty()) {
+                graphics.text(
+                        font,
+                        font.plainSubstrByWidth(row.label(), LOOT_WIDTH - 8),
+                        4,
+                        rowY,
+                        row.labelColor(),
+                        true);
+            } else {
+                if (!row.value().isEmpty()) {
+                    right(graphics, font, row.value(), 4 + valueWidth, rowY, row.valueColor());
+                    graphics.text(font, " | ", 4 + valueWidth, rowY, Graph.MUTED, true);
+                }
+                drawParts(graphics, font, row.parts(), itemX, rowY);
+            }
+            rowY += 11;
+            previousLoot = loot;
+            previousRow = true;
+        }
+        if (previousLoot && !content.metrics().isEmpty()) {
+            rowY += 3;
+        }
+        for (HudContent.Row row : content.metrics()) {
+            drawLedgerSummary(graphics, font, row, rowY);
+            rowY += 11;
+        }
+    }
+
+    private static void drawLedgerSummary(
+            GuiGraphicsExtractor graphics, Font font, HudContent.Row row, int rowY) {
+        List<HudContent.Part> parts =
+                row.parts().isEmpty()
+                        ? List.of(
+                                new HudContent.Part(
+                                        row.label() + (row.value().isEmpty() ? "" : ": "), WHITE),
+                                new HudContent.Part(row.value(), row.valueColor()))
+                        : row.parts();
+        drawParts(graphics, font, parts, 4, rowY);
+    }
+
+    private static void drawParts(
+            GuiGraphicsExtractor graphics, Font font, List<HudContent.Part> parts, int x, int y) {
+        for (HudContent.Part part : parts) {
+            int available = LOOT_WIDTH - 4 - x;
+            if (available <= 0) {
+                return;
+            }
+            String text = font.plainSubstrByWidth(part.text(), available);
+            graphics.text(font, text, x, y, part.color(), true);
+            x += font.width(text);
+            if (text.length() < part.text().length()) {
+                return;
+            }
+        }
     }
 
     private static int drawRows(

@@ -47,6 +47,11 @@ public final class SettingsScreen extends Screen {
                 "Graph",
                 "Choose graph lines, projections, spawn markers and graph text.",
                 () -> minecraft.setScreen(new GraphOptionsScreen(this)));
+        category(
+                4,
+                "Farming cues",
+                "Pedestal countdown, fight time, local alerts and compact chat.",
+                () -> minecraft.setScreen(new FarmingSettingsScreen(this)));
         addRenderableWidget(
                 new FlatButton(
                         panelX + 16,
@@ -59,12 +64,13 @@ public final class SettingsScreen extends Screen {
     }
 
     private void category(int index, String label, String tip, Runnable action) {
+        int step = Math.max(16, Math.min(28, (panelHeight - 110) / 4));
         var button =
                 new FlatButton(
                         panelX + 16,
-                        panelY + 49 + index * 30,
+                        panelY + 49 + index * step,
                         panelWidth - 32,
-                        22,
+                        Math.min(22, step - 2),
                         label,
                         false,
                         action);

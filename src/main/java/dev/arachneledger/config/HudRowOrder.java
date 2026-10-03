@@ -48,6 +48,26 @@ public final class HudRowOrder {
         return new ArrayList<>(ROWS.stream().map(Definition::id).toList());
     }
 
+    /** Loot first, then the compact activity and coin summary. Custom orders remain independent. */
+    public static List<String> lootLedgerOrder() {
+        return normalize(
+                List.of(
+                        "loot",
+                        "kills",
+                        "scavenger",
+                        "crystalCosts",
+                        "callingCosts",
+                        "profit",
+                        "hourly",
+                        "activeTime",
+                        "projectedHourly",
+                        "regularProfit",
+                        "regularHourly",
+                        "scope",
+                        "status",
+                        "unpriced"));
+    }
+
     /**
      * Preserve supported custom keys, discard damaged entries, then append newly available rows.
      */
