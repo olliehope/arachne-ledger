@@ -352,6 +352,12 @@ public final class LedgerCommands {
     }
 
     private void priceCommands(LiteralArgumentBuilder<FabricClientCommandSource> root) {
+        var ironman =
+                literal("ironman").executes(c -> run(() -> setIronman(!tracker.config.ironman)));
+        for (String option : new String[] {"on", "off"}) {
+            ironman.then(literal(option).executes(c -> run(() -> setIronman(option.equals("on")))));
+        }
+        root.then(ironman);
         var bazaar =
                 literal("bazaar")
                         .executes(
@@ -374,9 +380,13 @@ public final class LedgerCommands {
                                                                 option.equals("on");
                                                         tracker.saveConfig();
                                                         say(
-                                                                "Automatic Bazaar prices "
+                                                                (tracker.config.ironman
+                                                                                ? "Saved Bazaar preference "
+                                                                                : "Automatic Bazaar prices ")
                                                                         + option
-                                                                        + "; manual overrides remain in use.");
+                                                                        + (tracker.config.ironman
+                                                                                ? "; Ironman continues to use NPC / George values."
+                                                                                : "; manual overrides remain in use."));
                                                     })));
         }
         bazaar.then(
@@ -388,7 +398,9 @@ public final class LedgerCommands {
                                                     tracker.config.useBazaarItems();
                                                     tracker.saveConfig();
                                                     say(
-                                                            "Bazaar items now use automatic prices; other values stay manual.");
+                                                            tracker.config.ironman
+                                                                    ? "Bazaar item choices saved for when Ironman is off."
+                                                                    : "Bazaar items now use automatic prices; other saved values are kept.");
                                                 })));
         bazaar.then(
                 literal("refresh")
@@ -402,7 +414,9 @@ public final class LedgerCommands {
                                                                                 System
                                                                                         .currentTimeMillis())
                                                                         ? "Refreshing Bazaar prices."
-                                                                        : "Enable Bazaar prices first; refreshes are limited to once every five minutes."))));
+                                                                        : tracker.config.ironman
+                                                                                ? "Bazaar prices are bypassed while Ironman is on."
+                                                                                : "Enable Bazaar prices first; refreshes are limited to once every five minutes."))));
         root.then(bazaar);
 
         root.then(
@@ -480,8 +494,20 @@ public final class LedgerCommands {
                                                                                                     + Catalog
                                                                                                             .name(
                                                                                                                     id)
-                                                                                                    + " manual price saved.");
+                                                                                                    + (tracker.config
+                                                                                                                    .ironman
+                                                                                                            ? " manual price saved for when Ironman is off."
+                                                                                                            : " manual price saved."));
                                                                                 })))));
+    }
+
+    private void setIronman(boolean enabled) {
+        tracker.config.ironman = enabled;
+        tracker.saveConfig();
+        say(
+                enabled
+                        ? "Ironman pricing enabled: NPC / George values, with unsellable rewards excluded. Saved history and market prices are kept."
+                        : "Ironman pricing disabled: saved manual and Bazaar choices restored. Saved history is kept.");
     }
 
     private void adjustmentCommands(LiteralArgumentBuilder<FabricClientCommandSource> root) {
@@ -642,7 +668,7 @@ public final class LedgerCommands {
                                                     say(
                                                             "chat [on|off] | mindamage <damage> (default 10,000)");
                                                     say(
-                                                            "bazaar [on|off|defaults|refresh] | rng [on|off|value|test [epic|legendary|fang]]");
+                                                            "ironman [on|off] | bazaar [on|off|defaults|refresh] | rng [on|off|value|test [epic|legendary|fang]]");
                                                     say(
                                                             "crystal <cost> | recipe | price <ITEM_ID> <coins> | add <ITEM_ID> <count> | income/expense <coins>");
                                                 })));

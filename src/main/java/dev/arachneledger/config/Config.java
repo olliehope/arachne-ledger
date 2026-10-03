@@ -2,6 +2,7 @@ package dev.arachneledger.config;
 
 import dev.arachneledger.pricing.BazaarPrices;
 import dev.arachneledger.pricing.GearValuation;
+import dev.arachneledger.pricing.NpcPrices;
 import dev.arachneledger.skyblock.Catalog;
 
 import java.util.LinkedHashMap;
@@ -47,6 +48,9 @@ public final class Config {
     public boolean dashboardFights = false;
     // Valuation preferences and participation threshold.
     public boolean autoBazaar = false;
+    public boolean ironman = false;
+    // Zero in legacy JSON; empty NPC defaults are filled once, before future manual edits.
+    public int npcDefaultsVersion = 0;
     public BazaarMode bazaarMode = BazaarMode.INSTANT_SELL;
     public GraphPreferences graph = new GraphPreferences();
     public boolean scavengerCoins = true;
@@ -81,18 +85,7 @@ public final class Config {
 
     public Config() {
         for (String id : Catalog.ITEMS.keySet()) {
-            prices.put(id, 0.0);
-        }
-        prices.put("SOUL_STRING", 5000.0);
-        prices.put("ARACHNE_FRAGMENT", 500.0);
-        prices.put("STRING", 3.0);
-        prices.put("SPIDER_EYE", 3.0);
-        prices.put("ENCHANTED_STRING", 576.0);
-        prices.put("ENCHANTED_SPIDER_EYE", 480.0);
-        for (String id : Catalog.ITEMS.keySet()) {
-            if (GearValuation.supports(id)) {
-                prices.put(id, GearValuation.npcPrice(id));
-            }
+            prices.put(id, NpcPrices.price(id));
         }
     }
 
@@ -101,6 +94,7 @@ public final class Config {
     }
 
     public double price(String id) {
+        if (ironman) return NpcPrices.price(id);
         if (autoBazaar && !isManualPrice(id) && selectedBazaarPrices().containsKey(id)) {
             return selectedBazaarPrices().get(id);
         }
@@ -108,13 +102,25 @@ public final class Config {
     }
 
     public String priceSource(String id) {
+        if (ironman) {
+            return NpcPrices.known(id) && NpcPrices.price(id) == 0
+                    ? "Excluded (Ironman)"
+                    : NpcPrices.source(id);
+        }
         if (isManualPrice(id)) {
-            return "Manual";
+            return defaultPriceSource(id, "Manual");
         }
         if (autoBazaar && selectedBazaarPrices().containsKey(id)) {
             return "Bazaar";
         }
-        return prices.getOrDefault(id, 0.0) > 0 ? "Fallback" : "Unpriced";
+        return prices.getOrDefault(id, 0.0) > 0 ? defaultPriceSource(id, "Fallback") : "Unpriced";
+    }
+
+    private String defaultPriceSource(String id, String otherwise) {
+        double value = prices.getOrDefault(id, 0.0);
+        return value > 0 && Double.compare(value, NpcPrices.price(id)) == 0
+                ? NpcPrices.source(id)
+                : otherwise;
     }
 
     /** Values future loot only; journal entries retain the unit value saved when recorded. */
@@ -124,6 +130,30 @@ public final class Config {
 
     public String lootPriceSource(String id) {
         return GearValuation.supports(id) ? GearValuation.source(id, this) : priceSource(id);
+    }
+
+    /** An excluded receipt remains a known zero even after the pricing mode changes. */
+    public boolean intentionalZeroLoot(String id) {
+        return ironman && NpcPrices.known(id) && lootPrice(id) == 0;
+    }
+
+    /** Reset future loot values deliberately; summon costs and recorded entries are untouched. */
+    public void useNpcDefaults() {
+        prices.clear();
+        for (String id : Catalog.ITEMS.keySet()) prices.put(id, NpcPrices.price(id));
+        manualPriceItems = new LinkedHashSet<>();
+        autoBazaar = false;
+        npcDefaultsVersion = 1;
+    }
+
+    private void migrateNpcDefaults() {
+        if (npcDefaultsVersion >= 1) return;
+        for (String id : NpcPrices.LEGACY_EMPTY_DEFAULTS) {
+            if (Double.compare(prices.getOrDefault(id, 0.0), 0.0) == 0) {
+                prices.put(id, NpcPrices.price(id));
+            }
+        }
+        npcDefaultsVersion = 1;
     }
 
     public Map<String, Double> selectedBazaarPrices() {
@@ -141,6 +171,7 @@ public final class Config {
             throw new IllegalArgumentException("Unknown loot item.");
         }
         amount(Double.toString(value));
+        migrateNpcDefaults();
         migratePrices();
         prices.put(id, value);
         manualPriceItems.add(id);
@@ -198,7 +229,7 @@ public final class Config {
         validateAutomaticPrices();
         normalizeHudLayout();
         for (String id : Catalog.ITEMS.keySet()) {
-            prices.putIfAbsent(id, 0.0);
+            prices.putIfAbsent(id, NpcPrices.price(id));
         }
     }
 
@@ -220,6 +251,7 @@ public final class Config {
     }
 
     private void migrateOptionalSettings() {
+        migrateNpcDefaults();
         migratePrices();
         if (bazaarPrices == null) {
             bazaarPrices = new LinkedHashMap<>();

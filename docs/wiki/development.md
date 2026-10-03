@@ -21,11 +21,13 @@ Run `./gradlew formatJava` or `.\gradlew.bat formatJava` before committing Java 
 | `ledger` | Recorded entries, joined history, totals, projections, RNG breakdown, recaps, records, and CSV export |
 | `achievement` | Data-driven milestone definitions, trusted facts, unlock evaluation, and saved state |
 | `diagnostics` | Bounded observation history, tracking snapshots, and plain-text reports |
-| `pricing` | Bazaar fetches and NPC/salvage valuation |
+| `pricing` | Bazaar fetches, NPC/George sale defaults, and salvage valuation |
 | `ui` and `ui.screen` | HUD, graph rendering, and screens |
 | `integration` and `mixin` | Optional Mod Menu and pickup hooks |
 
 Keep server-format parsing separate from accounting. Price and display changes should preserve recorded history unless the player explicitly requests a correction or repricing. Config field names and ledger JSON are save compatibility contracts.
+
+`NpcPrices` holds the base sale table, separate from summon acquisition costs. `Config` chooses the valuation for future loot; `GearValuation` applies independent armor and weapon salvage choices. An entry's `intentionalZero` flag distinguishes excluded Ironman rewards from missing prices. Preserve it when copying or correcting receipts, and calculate warnings from receipts rather than the player's current pricing mode.
 
 For a new achievement, add a stable entry in `Achievements.definitions()`; add a metric and fact only if existing metrics cannot express the goal. Keep IDs permanent and increment the catalog version when adding definitions so existing history fills silently. UI filtering and notifications should not change the ledger's financial entries.
 

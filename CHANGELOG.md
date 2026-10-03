@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.1
+
+- Filled base loot prices with NPC sale values and Tarantula pet prices from George.
+- Added Ironman pricing: unsellable drops and salvaged essence retain their quantities without coin value or missing-price warnings.
+- Added an NPC defaults action and Ironman controls in the price settings and `/arachne ironman` command.
+- Kept saved market prices available when switching modes; recorded history changes only when explicitly repricing the session.
+
 ## 1.2.0
 
 - Added 17 Arachne achievements with tiers, progress bars, a hidden rare milestone, optional unlock chat, and silent backfill from existing history.

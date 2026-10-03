@@ -183,7 +183,8 @@ public final class FightDetailsScreen extends Screen {
                                             + "x "
                                             + Catalog.name(item);
             double value = values.getOrDefault(item, 0.0);
-            String price = value == 0 ? "Unpriced" : Format.coins(value) + " coins";
+            boolean missingPrice = value == 0 && stats.unpricedLoot().getOrDefault(item, 0L) > 0;
+            String price = missingPrice ? "Unpriced" : Format.coins(value) + " coins";
             int rowY = top + (i - scrollOffset) * 13,
                     right = panelX + panelWidth - 16 - font.width(price);
             graphics.text(

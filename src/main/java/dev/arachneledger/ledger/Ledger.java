@@ -7,6 +7,7 @@ import dev.arachneledger.skyblock.PurseCoins;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -41,7 +42,21 @@ public final class Ledger {
             double unit,
             String source,
             long fightId,
-            long id) {
+            long id,
+            boolean intentionalZero) {
+        public Entry(
+                long at,
+                long elapsed,
+                Kind kind,
+                String item,
+                long count,
+                double unit,
+                String source,
+                long fightId,
+                long id) {
+            this(at, elapsed, kind, item, count, unit, source, fightId, id, false);
+        }
+
         public Entry(
                 long at,
                 long elapsed,
@@ -50,7 +65,12 @@ public final class Ledger {
                 long count,
                 double unit,
                 String source) {
-            this(at, elapsed, kind, item, count, unit, source, 0, 0);
+            this(at, elapsed, kind, item, count, unit, source, 0, 0, false);
+        }
+
+        /** A zero sell value is known in Ironman; an unset price is still missing. */
+        public boolean unpriced() {
+            return kind == Kind.LOOT && unit == 0 && !intentionalZero;
         }
 
         public double income() {
@@ -75,7 +95,27 @@ public final class Ledger {
             long elapsed,
             Map<String, Long> loot,
             List<Point> graph,
-            long unpriced) {
+            long unpriced,
+            Map<String, Long> unpricedLoot) {
+        public Stats {
+            unpricedLoot = Collections.unmodifiableMap(new LinkedHashMap<>(unpricedLoot));
+        }
+
+        public Stats(
+                double revenue,
+                double costs,
+                long crystals,
+                long callings,
+                long kills,
+                long elapsed,
+                Map<String, Long> loot,
+                List<Point> graph,
+                long unpriced) {
+            this(
+                    revenue, costs, crystals, callings, kills, elapsed, loot, graph, unpriced,
+                    Map.of());
+        }
+
         public double profit() {
             return revenue - costs;
         }
@@ -139,7 +179,30 @@ public final class Ledger {
             double unit,
             String source,
             long now,
+            boolean intentionalZero) {
+        return add(kind, item, count, unit, source, now, 0, intentionalZero);
+    }
+
+    public Entry add(
+            Kind kind,
+            String item,
+            long count,
+            double unit,
+            String source,
+            long now,
             long fightId) {
+        return add(kind, item, count, unit, source, now, fightId, false);
+    }
+
+    public Entry add(
+            Kind kind,
+            String item,
+            long count,
+            double unit,
+            String source,
+            long now,
+            long fightId,
+            boolean intentionalZero) {
         if (kind == null
                 || item == null
                 || source == null
@@ -148,9 +211,19 @@ public final class Ledger {
             throw new IllegalArgumentException("Invalid ledger entry");
         }
         Config.validateRecordedPrice(unit);
+        validateZeroIntent(kind, unit, intentionalZero);
         Entry entry =
                 new Entry(
-                        now, activeMillis, kind, item, count, unit, source, fightId, nextEntryId++);
+                        now,
+                        activeMillis,
+                        kind,
+                        item,
+                        count,
+                        unit,
+                        source,
+                        fightId,
+                        nextEntryId++,
+                        intentionalZero);
         entries.add(entry);
         revision++;
         return entry;
@@ -220,7 +293,8 @@ public final class Ledger {
                                 entry.unit,
                                 entry.source,
                                 fightId,
-                                entry.id));
+                                entry.id,
+                                entry.intentionalZero));
             }
         }
         revision++;
@@ -291,15 +365,27 @@ public final class Ledger {
      */
     public void setFightLootCount(
             long fightId, String item, long count, double fallbackUnit, long now) {
+        setFightLootCount(fightId, item, count, fallbackUnit, now, false);
+    }
+
+    public void setFightLootCount(
+            long fightId,
+            String item,
+            long count,
+            double fallbackUnit,
+            long now,
+            boolean fallbackIntentionalZero) {
         if (!Catalog.ITEMS.containsKey(item) || count < 0 || count > MAX_ENTRY_COUNT) {
             throw new IllegalArgumentException(
                     "Use a known item and quantity from 0 to 1 billion.");
         }
         Config.validateRecordedPrice(fallbackUnit);
+        validateZeroIntent(Kind.LOOT, fallbackUnit, fallbackIntentionalZero);
         FightRecord fight = fight(fightId);
         requireCompletedFight(fight);
 
-        LootReplacement replacement = planLootReplacement(fight, item, fallbackUnit);
+        LootReplacement replacement =
+                planLootReplacement(fight, item, fallbackUnit, fallbackIntentionalZero);
         int insertionIndex = removeFightLoot(fightId, item, replacement.insertionIndex());
         if (count > 0) {
             insertFightLoot(fight, item, count, now, insertionIndex, replacement);
@@ -315,13 +401,15 @@ public final class Ledger {
         }
     }
 
-    private record LootReplacement(int insertionIndex, long activePosition, double unitPrice) {}
+    private record LootReplacement(
+            int insertionIndex, long activePosition, double unitPrice, boolean intentionalZero) {}
 
     private LootReplacement planLootReplacement(
-            FightRecord fight, String item, double fallbackUnit) {
+            FightRecord fight, String item, double fallbackUnit, boolean fallbackIntentionalZero) {
         int insertionIndex = -1;
         long existingCount = 0;
         double existingValue = 0;
+        boolean allIntentionalZero = true;
         long activePosition = fight.activeEnd;
         for (int entryIndex = 0; entryIndex < entries.size(); entryIndex++) {
             Entry entry = entries.get(entryIndex);
@@ -332,16 +420,20 @@ public final class Ledger {
             if (isFightLoot(entry, fight.id, item)) {
                 existingCount += entry.count;
                 existingValue += entry.income();
+                allIntentionalZero &= entry.intentionalZero;
             }
         }
 
         // Multiple receipts may have different prices. Their weighted recorded unit value
         // preserves the historical valuation; today's price is used only for a missing item.
         double unitPrice = existingCount > 0 ? existingValue / existingCount : fallbackUnit;
+        boolean intentionalZero =
+                unitPrice == 0
+                        && (existingCount > 0 ? allIntentionalZero : fallbackIntentionalZero);
         if (insertionIndex < 0) {
             insertionIndex = findHistoricalInsertionIndex(fight, activePosition);
         }
-        return new LootReplacement(insertionIndex, activePosition, unitPrice);
+        return new LootReplacement(insertionIndex, activePosition, unitPrice, intentionalZero);
     }
 
     private int findHistoricalInsertionIndex(FightRecord fight, long activePosition) {
@@ -397,7 +489,8 @@ public final class Ledger {
                         replacement.unitPrice(),
                         "fight_edit",
                         fight.id,
-                        nextEntryId++));
+                        nextEntryId++,
+                        replacement.intentionalZero()));
         if (insertionIndex < sessionStart
                 || (insertionIndex == sessionStart && fight.session < sessionId)) {
             sessionStart++;
@@ -435,7 +528,12 @@ public final class Ledger {
     }
 
     public void reprice(String id, double unit) {
+        reprice(id, unit, false);
+    }
+
+    public void reprice(String id, double unit, boolean intentionalZero) {
         Config.validateRecordedPrice(unit);
+        validateZeroIntent(Kind.LOOT, unit, intentionalZero);
         for (int entryIndex = sessionStart; entryIndex < entries.size(); entryIndex++) {
             Entry entry = entries.get(entryIndex);
             if (entry.item.equals(id)) {
@@ -450,7 +548,8 @@ public final class Ledger {
                                 unit,
                                 entry.source,
                                 entry.fightId,
-                                entry.id));
+                                entry.id,
+                                entry.kind == Kind.LOOT && intentionalZero));
             }
         }
         revision++;
@@ -474,7 +573,8 @@ public final class Ledger {
                 activeMillis - (total ? 0 : sessionMillis),
                 cachedStats.loot,
                 cachedStats.graph,
-                cachedStats.unpriced);
+                cachedStats.unpriced,
+                cachedStats.unpricedLoot);
     }
 
     private void rebuildStatsCache(boolean total) {
@@ -613,6 +713,7 @@ public final class Ledger {
                 throw new IllegalArgumentException("Invalid entry identity");
             }
             Config.validateRecordedPrice(entry.unit);
+            validateZeroIntent(entry.kind, entry.unit, entry.intentionalZero);
             previousElapsed = entry.elapsed;
         }
     }
@@ -647,9 +748,17 @@ public final class Ledger {
                         entry.unit,
                         entry.source,
                         entry.fightId,
-                        nextEntryId++);
+                        nextEntryId++,
+                        entry.intentionalZero);
         entries.set(entryIndex, migrated);
         return migrated;
+    }
+
+    private static void validateZeroIntent(Kind kind, double unit, boolean intentionalZero) {
+        if (intentionalZero && (kind != Kind.LOOT || unit != 0)) {
+            throw new IllegalArgumentException(
+                    "Only zero-valued loot can have an intentional zero price.");
+        }
     }
 
     private void clearDerivedCaches() {

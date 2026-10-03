@@ -64,6 +64,8 @@ def regressionSuites = [
     'Analytics': 'dev.arachneledger.ledger',
     'Bazaar': 'dev.arachneledger.pricing',
     'BazaarModes': 'dev.arachneledger.pricing',
+    'NpcPricing': 'dev.arachneledger.pricing',
+    'IronmanReceipts': 'dev.arachneledger.pricing',
     'Fight': 'dev.arachneledger.tracking',
     'Graph': 'dev.arachneledger.ui',
     'History': 'dev.arachneledger.tracking',

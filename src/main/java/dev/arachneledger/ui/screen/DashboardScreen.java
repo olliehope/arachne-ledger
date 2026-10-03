@@ -333,12 +333,13 @@ public final class DashboardScreen extends Screen {
         List<Row> rows = new ArrayList<>();
         for (String id : Hud.sortedLoot(analytics, stats)) {
             double value = analytics.lootRevenue().getOrDefault(id, 0.0);
+            boolean missingPrice = value == 0 && stats.unpricedLoot().getOrDefault(id, 0L) > 0;
             rows.add(
                     new Row(
                             String.format(Locale.ROOT, "%,d", stats.loot().get(id))
                                     + "x "
                                     + Catalog.name(id),
-                            value == 0 ? "Unpriced" : Format.coins(value) + " coins",
+                            missingPrice ? "Unpriced" : Format.coins(value) + " coins",
                             Hud.itemColor(id),
                             value == 0 ? Graph.MUTED : Hud.GOLD,
                             Catalog.name(id)

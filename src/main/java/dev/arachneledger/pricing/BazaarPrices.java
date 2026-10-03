@@ -114,7 +114,7 @@ public final class BazaarPrices {
             }
             pending = null;
         }
-        if (config.autoBazaar && pending == null && now >= nextAttempt) {
+        if (config.autoBazaar && !config.ironman && pending == null && now >= nextAttempt) {
             requestRefresh(config, now);
         }
         return changed;
@@ -122,7 +122,7 @@ public final class BazaarPrices {
 
     /** Respect the five-minute throttle even when a user repeatedly presses Refresh. */
     public boolean requestRefresh(Config config, long now) {
-        if (!config.autoBazaar || pending != null || now < nextAttempt) {
+        if (!config.autoBazaar || config.ironman || pending != null || now < nextAttempt) {
             return false;
         }
         nextAttempt = now + REFRESH_MILLIS;
@@ -139,6 +139,9 @@ public final class BazaarPrices {
     }
 
     public String status(Config config, long now) {
+        if (config.ironman) {
+            return "Bazaar: bypassed (Ironman)";
+        }
         if (!config.autoBazaar) {
             return "Bazaar: off";
         }

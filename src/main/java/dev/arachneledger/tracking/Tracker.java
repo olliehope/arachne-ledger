@@ -625,7 +625,11 @@ public final class Tracker {
         if (!ready()) {
             throw new IllegalStateException("Join a world first, or resolve the storage error.");
         }
-        Ledger.Entry entry = ledger.add(kind, itemId, quantity, unitPrice, source, now, fightId);
+        boolean intentionalZero =
+                kind == Ledger.Kind.LOOT && unitPrice == 0 && config.intentionalZeroLoot(itemId);
+        Ledger.Entry entry =
+                ledger.add(
+                        kind, itemId, quantity, unitPrice, source, now, fightId, intentionalZero);
         ledgerDirty = true;
         return entry;
     }
@@ -656,8 +660,14 @@ public final class Tracker {
         if (!ready()) {
             throw new IllegalStateException("No ledger loaded.");
         }
+        double unitPrice = config.lootPrice(itemId);
         ledger.setFightLootCount(
-                fightId, itemId, quantity, config.lootPrice(itemId), System.currentTimeMillis());
+                fightId,
+                itemId,
+                quantity,
+                unitPrice,
+                System.currentTimeMillis(),
+                unitPrice == 0 && config.intentionalZeroLoot(itemId));
         ledgerDirty = true;
         save();
     }
@@ -673,7 +683,7 @@ public final class Tracker {
 
     public void reprice(String itemId, double unitPrice) {
         if (ready()) {
-            ledger.reprice(itemId, unitPrice);
+            ledger.reprice(itemId, unitPrice, unitPrice == 0 && config.intentionalZeroLoot(itemId));
             ledgerDirty = true;
             save();
         }

@@ -155,6 +155,12 @@ public final class BazaarChecks {
         config.crystalCost = 1234;
         eq(1234, config.effectiveCrystalCost(), "Explicit crystal cost is not changed by Bazaar");
         config.clearManual("LUXURIOUS_SPOOL");
+        eq(1, config.price("LUXURIOUS_SPOOL"), "Unsupported market retains the NPC sale fallback");
+        yes(
+                config.priceSource("LUXURIOUS_SPOOL").equals("NPC sale"),
+                "NPC fallback identifies its seller");
+        config.manualSet("LUXURIOUS_SPOOL", 0);
+        config.clearManual("LUXURIOUS_SPOOL");
         yes(
                 config.priceSource("LUXURIOUS_SPOOL").equals("Unpriced"),
                 "Unsupported market has an honest unpriced fallback");

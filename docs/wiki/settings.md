@@ -19,11 +19,15 @@ Changing **Text layout** rearranges your existing selections. Minimal shows Summ
 
 ## Prices
 
-Set loot unit values and Calling costs on **Settings → Prices & salvage**. Items without a value still appear in the drop counts, but add no coins. Pet prices are manual.
+Set loot unit values and Calling costs on **Settings → Prices & salvage**. Base values use NPC sell prices and George's pet sell prices. **NPC defaults** restores those loot values and turns Auto Bazaar off; summon costs are kept. Existing custom prices remain until you reset them. Previously empty NPC and pet defaults are filled once when updating.
 
-Crystals use the configured value of **2 Arachne Fragments + 16 Enchanted Spider Eyes + 16 Enchanted String** by default. Choose a fixed cost if you buy them at a different price. `/arachne crystal <coins>` sets that cost; `/arachne recipe` restores recipe valuation.
+**Ironman** uses NPC and George values, bypassing manual and Bazaar market prices. Spider Essence, Arachne Shards, and gear selected for salvage keep their drop counts with no coin value or missing-price warning. Switch Ironman off to restore your saved pricing choices. `/arachne ironman` toggles the mode; `/arachne ironman on|off` sets it explicitly. This is a valuation preference, not automatic SkyBlock profile detection.
 
-Automatic Bazaar pricing is off by default. **Use Bazaar items** opts supported materials into automatic pricing; **Manual/Auto** controls an individual item. A manual override wins, including an explicit zero.
+The price editor and its **Salvage** page share an unsaved draft. **Save** applies the whole form; **Back** discards it. Invalid amounts leave all choices unsaved. Market-price controls are disabled while Ironman is on, without clearing their saved values.
+
+Crystals use the configured value of **2 Arachne Fragments + 16 Enchanted Spider Eyes + 16 Enchanted String** by default. Choose a fixed cost if you buy them at a different price. `/arachne crystal <coins>` sets that cost; `/arachne recipe` restores recipe valuation. Ironman recipe costs use the ingredients' NPC values; choose a fixed cost of **0** if you prefer not to count your own materials as a cost. Fixed Crystal and Calling costs are kept when changing modes.
+
+Automatic Bazaar pricing is off by default. **Bazaar items** opts supported materials into automatic pricing; **Manual/Auto** controls an individual item. Outside Ironman, a manual override wins, including an explicit zero. A zero market value still counts as unpriced.
 
 | Bazaar mode | Estimate |
 | --- | --- |
@@ -36,7 +40,7 @@ Both estimates are before tax. Prices refresh at most once every five minutes, w
 
 ## Salvage and purse income
 
-Choose armor and tools/weapons separately on **Salvage**. NPC mode uses the saved sale value. Salvage mode values each base Arachne armor piece or Arack as **5 Spider Essence**, using your essence price. The two values are not added together. Switching back preserves the saved sale-price override.
+Choose armor and tools/weapons separately on **Salvage**. NPC mode uses the saved sale value. Salvage mode values each base Arachne armor piece or Arack as **5 Spider Essence**, using your essence price. In Ironman, salvage is excluded from coin totals without a missing-price warning. The two values are not added together. Switching back preserves the saved sale-price override.
 
 These settings value drops; they do not sell or salvage items. Upgraded gear bonuses are not inferred from floating labels. **Scavenger coins** controls the eligible marked purse income described in [Tracking and profit](tracking-and-profit.md).
 

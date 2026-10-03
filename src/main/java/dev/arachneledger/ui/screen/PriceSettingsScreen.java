@@ -4,6 +4,7 @@ import dev.arachneledger.client.ArachneLedger;
 import dev.arachneledger.config.Config;
 import dev.arachneledger.pricing.BazaarPrices;
 import dev.arachneledger.pricing.GearValuation;
+import dev.arachneledger.pricing.NpcPrices;
 import dev.arachneledger.skyblock.Catalog;
 import dev.arachneledger.tracking.Tracker;
 import dev.arachneledger.ui.FlatButton;
@@ -11,6 +12,7 @@ import dev.arachneledger.ui.Format;
 import dev.arachneledger.ui.Graph;
 import dev.arachneledger.ui.Hud;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
@@ -22,32 +24,51 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 
+/** Pricing choices stay in a draft until Save or Reprice; closing discards the draft. */
 public final class PriceSettingsScreen extends Screen {
     private final Screen parent;
     private final Tracker tracker = ArachneLedger.tracker;
     private final List<String> itemIds = new ArrayList<>(Catalog.ITEMS.keySet());
-    private final Map<String, Double> draftPrices = new LinkedHashMap<>(tracker.config.prices);
-    private final Set<String> manualPriceItems =
-            new LinkedHashSet<>(
-                    tracker.config.manualPriceItems == null
-                            ? tracker.config.prices.keySet()
-                            : tracker.config.manualPriceItems);
+    private final Config draft = pricingDraft(tracker.config);
     private final Map<String, String> draftPriceInputs = new HashMap<>();
     private EditBox crystalCostField, callingCostField, unitPriceField;
-    private String fixedCrystalInput = Double.toString(tracker.config.crystalCost);
-    private String callingInput = Double.toString(tracker.config.callingCost), displayedPriceItemId;
+    private String fixedCrystalInput = Double.toString(draft.crystalCost);
+    private String callingInput = Double.toString(draft.callingCost), displayedPriceItemId;
     private int selectedItemIndex, panelX, panelY, panelWidth;
-    private boolean useRecipeCost = !tracker.config.crystalConfigured;
-    private boolean draftAutoBazaar = tracker.config.autoBazaar;
-    private String note = "Saved prices stay manual until you choose Auto.";
+    private boolean useRecipeCost = !draft.crystalConfigured;
+    private String note = "Save applies all choices. Back discards unsaved changes.";
 
     public PriceSettingsScreen(Screen parent) {
         super(Component.literal("Arachne prices"));
         this.parent = parent;
+    }
+
+    private static Config pricingDraft(Config saved) {
+        Config copy = new Config();
+        copy.prices = new LinkedHashMap<>(saved.prices);
+        copy.manualPriceItems =
+                new LinkedHashSet<>(
+                        saved.manualPriceItems == null
+                                ? saved.prices.keySet()
+                                : saved.manualPriceItems);
+        copy.bazaarPrices = new LinkedHashMap<>(saved.bazaarPrices);
+        copy.bazaarSellOfferPrices = new LinkedHashMap<>(saved.bazaarSellOfferPrices);
+        copy.bazaarUpdatedAt = saved.bazaarUpdatedAt;
+        copy.bazaarMode = saved.bazaarMode;
+        copy.autoBazaar = saved.autoBazaar;
+        copy.ironman = saved.ironman;
+        copy.npcDefaultsVersion = saved.npcDefaultsVersion;
+        copy.crystalCost = saved.crystalCost;
+        copy.callingCost = saved.callingCost;
+        copy.crystalConfigured = saved.crystalConfigured;
+        copy.salvageArmor = saved.salvageArmor;
+        copy.salvageWeapons = saved.salvageWeapons;
+        copy.scavengerCoins = saved.scavengerCoins;
+        // Finish legacy defaults before edits, including a first launch from Mod Menu.
+        copy.validate();
+        return copy;
     }
 
     @Override
@@ -56,7 +77,7 @@ public final class PriceSettingsScreen extends Screen {
         panelWidth = Math.min(500, width - 20);
         panelX = (width - panelWidth) / 2;
         panelY = Math.max(6, (height - 228) / 2);
-        addBazaarControls();
+        addPricingControls();
         addSummoningCostFields();
         addItemPriceFields();
         addUtilityButtons();
@@ -64,63 +85,75 @@ public final class PriceSettingsScreen extends Screen {
     }
 
     private void captureWidgetDrafts() {
-        // Minecraft recreates widgets on resize and when returning from another screen.
-        // Keep the editable draft separate from both the widgets and the recipe preview.
+        // Widgets are recreated on resize and on returning from a child screen.
         if (crystalCostField != null && crystalCostField.active) {
             fixedCrystalInput = crystalCostField.getValue();
         }
-        if (callingCostField != null) {
-            callingInput = callingCostField.getValue();
-        }
-        // The item index may already have changed; this widget still belongs to its previous item.
+        if (callingCostField != null) callingInput = callingCostField.getValue();
         if (unitPriceField != null && unitPriceField.active) {
             draftPriceInputs.put(displayedPriceItemId, unitPriceField.getValue());
         }
     }
 
-    private void addBazaarControls() {
-        addRenderableWidget(
+    private void addPricingControls() {
+        var ironman =
                 new FlatButton(
                         panelX + panelWidth - 148,
                         panelY + 8,
                         132,
                         18,
-                        draftAutoBazaar ? "Auto Bazaar: on" : "Auto Bazaar: off",
-                        draftAutoBazaar,
+                        draft.ironman ? "Ironman: on" : "Ironman: off",
+                        draft.ironman,
                         () -> {
-                            if (!rememberSelectedPrice()) {
-                                return;
-                            }
-                            draftAutoBazaar = !draftAutoBazaar;
-                            if (commitPrices()) {
-                                refreshBazaar();
-                                rebuildWidgets();
-                            }
-                        }));
-        var saleMode =
+                            if (!rememberSelectedPrice()) return;
+                            draft.ironman = !draft.ironman;
+                            note =
+                                    draft.ironman
+                                            ? "NPC / George values; unsellable rewards have no coin value."
+                                            : "Saved manual and Bazaar choices restored.";
+                            rebuildWidgets();
+                        });
+        ironman.setTooltip(
+                Tooltip.create(
+                        Component.literal(
+                                "Use NPC and George pet sale values. Essence, shards, and salvaged gear keep their counts without coin value or missing-price warnings. Saved manual and Bazaar choices are kept.")));
+        addRenderableWidget(ironman);
+        var automatic =
                 new FlatButton(
                         panelX + 16,
                         panelY + 28,
-                        Math.min(120, panelWidth - 170),
+                        132,
                         18,
-                        tracker.config.bazaarMode.label(),
-                        tracker.config.bazaarMode == Config.BazaarMode.SELL_OFFER,
+                        draft.autoBazaar ? "Auto Bazaar: on" : "Auto Bazaar: off",
+                        draft.autoBazaar,
                         () -> {
-                            if (!commitPrices()) {
-                                return;
-                            }
-                            tracker.config.bazaarMode =
-                                    tracker.config.bazaarMode == Config.BazaarMode.INSTANT_SELL
-                                            ? Config.BazaarMode.SELL_OFFER
-                                            : Config.BazaarMode.INSTANT_SELL;
-                            tracker.saveConfig();
-                            refreshBazaar();
+                            if (!rememberSelectedPrice()) return;
+                            draft.autoBazaar = !draft.autoBazaar;
                             rebuildWidgets();
                         });
+        automatic.active = !draft.ironman;
+        addRenderableWidget(automatic);
+        var saleMode =
+                new FlatButton(
+                        panelX + panelWidth - 148,
+                        panelY + 28,
+                        132,
+                        18,
+                        draft.bazaarMode.label(),
+                        draft.bazaarMode == Config.BazaarMode.SELL_OFFER,
+                        () -> {
+                            if (!rememberSelectedPrice()) return;
+                            draft.bazaarMode =
+                                    draft.bazaarMode == Config.BazaarMode.INSTANT_SELL
+                                            ? Config.BazaarMode.SELL_OFFER
+                                            : Config.BazaarMode.INSTANT_SELL;
+                            rebuildWidgets();
+                        });
+        saleMode.active = !draft.ironman;
         saleMode.setTooltip(
                 Tooltip.create(
                         Component.literal(
-                                "Choose the Bazaar estimate for future items: instant sell or a sell offer. Both are before tax; sell offers can take time or remain unfilled. Manual prices win. Reprice session explicitly to change recorded values.")));
+                                "Instant sell or sell-offer estimate for future rewards, before tax. Sell offers can take time or remain unfilled. Manual prices win. Reprice session explicitly to change recorded values.")));
         addRenderableWidget(saleMode);
     }
 
@@ -131,9 +164,7 @@ public final class PriceSettingsScreen extends Screen {
                         panelY + 48,
                         132,
                         "Crystal cost",
-                        useRecipeCost
-                                ? Double.toString(tracker.config.recipeCost())
-                                : fixedCrystalInput);
+                        useRecipeCost ? Double.toString(draft.recipeCost()) : fixedCrystalInput);
         crystalCostField.active = !useRecipeCost;
         addRenderableWidget(
                 new FlatButton(
@@ -144,9 +175,7 @@ public final class PriceSettingsScreen extends Screen {
                         useRecipeCost ? "Recipe cost" : "Fixed cost",
                         useRecipeCost,
                         () -> {
-                            if (!rememberSelectedPrice()) {
-                                return;
-                            }
+                            if (!rememberSelectedPrice()) return;
                             useRecipeCost = !useRecipeCost;
                             rebuildWidgets();
                         }));
@@ -168,96 +197,104 @@ public final class PriceSettingsScreen extends Screen {
                         false,
                         () -> selectItem(1)));
         displayedPriceItemId = itemIds.get(selectedItemIndex);
+        boolean editable = !draft.ironman && draft.isManualPrice(displayedPriceItemId);
         unitPriceField =
                 createPriceField(
                         panelX + panelWidth - 148,
                         panelY + 120,
                         132,
                         "Loot unit price",
-                        manualPriceItems.contains(displayedPriceItemId)
+                        editable
                                 ? draftPriceInputs.getOrDefault(
                                         displayedPriceItemId,
-                                        Double.toString(draftPrice(displayedPriceItemId)))
-                                : Double.toString(draftPrice(displayedPriceItemId)));
-        unitPriceField.active = manualPriceItems.contains(displayedPriceItemId);
-        addRenderableWidget(
+                                        Double.toString(
+                                                draft.prices.getOrDefault(
+                                                        displayedPriceItemId, 0.0)))
+                                : Double.toString(draft.lootPrice(displayedPriceItemId)));
+        unitPriceField.active = editable;
+        var manual =
                 new FlatButton(
                         panelX + 16,
                         panelY + 120,
-                        90,
+                        120,
                         20,
-                        unitPriceField.active ? "Manual price" : "Auto price",
-                        !unitPriceField.active,
-                        this::toggleManual));
+                        draft.ironman ? "NPC / George" : editable ? "Manual price" : "Auto price",
+                        !editable,
+                        this::toggleManual);
+        manual.active = !draft.ironman;
+        addRenderableWidget(manual);
     }
 
     private void addUtilityButtons() {
-        int utilityButtonWidth = (panelWidth - 44) / 4;
-        addRenderableWidget(
+        int buttonWidth = (panelWidth - 44) / 4;
+        int defaultsWidth = Math.max(buttonWidth, font.width("NPC defaults") + 4);
+        int bazaarWidth = Math.max(buttonWidth, font.width("Bazaar items") + 4);
+        int salvageWidth = (panelWidth - 44 - defaultsWidth - bazaarWidth) / 2;
+        int hudWidth = panelWidth - 44 - defaultsWidth - bazaarWidth - salvageWidth;
+        var defaults =
                 new FlatButton(
                         panelX + 16,
                         panelY + 163,
-                        utilityButtonWidth,
+                        defaultsWidth,
                         18,
-                        panelWidth < 400 ? "Bazaar" : "Use Bazaar items",
+                        "NPC defaults",
                         false,
                         () -> {
-                            if (!rememberSelectedPrice()) {
-                                return;
-                            }
-                            for (String itemId : itemIds) {
-                                if (BazaarPrices.supports(itemId, tracker.config)) {
-                                    manualPriceItems.remove(itemId);
-                                }
-                            }
-                            draftAutoBazaar = true;
-                            if (commitPrices()) {
-                                refreshBazaar();
-                                note = "Bazaar materials use Auto; other saved prices are kept.";
-                                rebuildWidgets();
-                            }
-                        }));
-        addRenderableWidget(
-                new FlatButton(
-                        panelX + 20 + utilityButtonWidth,
-                        panelY + 163,
-                        utilityButtonWidth,
-                        18,
-                        tracker.config.hud ? "HUD: on" : "HUD: off",
-                        false,
-                        () -> {
-                            if (!rememberSelectedPrice()) {
-                                return;
-                            }
-                            tracker.config.hud = !tracker.config.hud;
-                            tracker.saveConfig();
+                            captureWidgetDrafts();
+                            draft.useNpcDefaults();
+                            draftPriceInputs.clear();
+                            // Do not let rebuilding copy the replaced item field back into the
+                            // draft.
+                            unitPriceField = null;
+                            note = "NPC / George defaults selected. Summon costs are kept.";
                             rebuildWidgets();
-                        }));
-        addRenderableWidget(
+                        });
+        defaults.setTooltip(
+                Tooltip.create(
+                        Component.literal(
+                                "Replace loot values with NPC and George pet sale defaults, clear manual overrides, and turn Auto Bazaar off. Save to apply. Summon costs and recorded entries stay unchanged.")));
+        addRenderableWidget(defaults);
+        var bazaar =
                 new FlatButton(
-                        panelX + 28 + utilityButtonWidth * 3,
+                        panelX + 20 + defaultsWidth,
                         panelY + 163,
-                        utilityButtonWidth,
+                        bazaarWidth,
                         18,
-                        "Edit HUD",
+                        "Bazaar items",
                         false,
                         () -> {
-                            if (commitPrices()) {
-                                minecraft.setScreen(new HudEditorScreen(this));
-                            }
-                        }));
+                            if (!rememberSelectedPrice()) return;
+                            draft.useBazaarItems();
+                            note =
+                                    "Supported Bazaar materials use Auto; other saved prices are kept.";
+                            rebuildWidgets();
+                        });
+        bazaar.active = !draft.ironman;
+        addRenderableWidget(bazaar);
         addRenderableWidget(
                 new FlatButton(
-                        panelX + 24 + utilityButtonWidth * 2,
+                        panelX + 24 + defaultsWidth + bazaarWidth,
                         panelY + 163,
-                        utilityButtonWidth,
+                        salvageWidth,
                         18,
                         "Salvage",
                         false,
                         () -> {
-                            if (commitPrices()) {
-                                minecraft.setScreen(new ValuationScreen(this));
-                            }
+                            if (!rememberSelectedPrice()) return;
+                            captureWidgetDrafts();
+                            minecraft.setScreen(new ValuationScreen(this, draft));
+                        }));
+        addRenderableWidget(
+                new FlatButton(
+                        panelX + 28 + defaultsWidth + bazaarWidth + salvageWidth,
+                        panelY + 163,
+                        hudWidth,
+                        18,
+                        "Edit HUD",
+                        false,
+                        () -> {
+                            captureWidgetDrafts();
+                            minecraft.setScreen(new HudEditorScreen(this));
                         }));
     }
 
@@ -272,9 +309,7 @@ public final class PriceSettingsScreen extends Screen {
                         "Save",
                         true,
                         () -> {
-                            if (commitPrices()) {
-                                note = "Saved. New drops use these prices.";
-                            }
+                            if (commitPrices()) note = "Saved. New drops use these values.";
                         }));
         var repriceSessionButton =
                 new FlatButton(
@@ -285,20 +320,14 @@ public final class PriceSettingsScreen extends Screen {
                         panelWidth < 400 ? "Reprice" : "Reprice session",
                         false,
                         () -> {
-                            if (commitPrices()) {
-                                for (String itemId : itemIds) {
-                                    tracker.reprice(itemId, tracker.config.lootPrice(itemId));
-                                }
-                                tracker.reprice(
-                                        "ARACHNE_CRYSTAL", tracker.config.effectiveCrystalCost());
-                                tracker.reprice(
-                                        "ARACHNE_KEEPER_FRAGMENT", tracker.config.callingCost);
-                                if (!"".equals(tracker.error)) {
-                                    storageError();
-                                } else {
-                                    note = "Session repriced; older sessions unchanged.";
-                                }
-                            }
+                            if (!commitPrices()) return;
+                            for (String itemId : itemIds)
+                                tracker.reprice(itemId, tracker.config.lootPrice(itemId));
+                            tracker.reprice(
+                                    "ARACHNE_CRYSTAL", tracker.config.effectiveCrystalCost());
+                            tracker.reprice("ARACHNE_KEEPER_FRAGMENT", tracker.config.callingCost);
+                            if (!"".equals(tracker.error)) storageError();
+                            else note = "Session repriced; older sessions unchanged.";
                         });
         repriceSessionButton.active = tracker.ready() && "".equals(tracker.error);
         if (!repriceSessionButton.active) {
@@ -321,14 +350,6 @@ public final class PriceSettingsScreen extends Screen {
                         this::onClose));
     }
 
-    private double draftPrice(String itemId) {
-        return draftAutoBazaar
-                        && !manualPriceItems.contains(itemId)
-                        && tracker.config.selectedBazaarPrices().containsKey(itemId)
-                ? tracker.config.selectedBazaarPrices().get(itemId)
-                : draftPrices.getOrDefault(itemId, 0.0);
-    }
-
     private EditBox createPriceField(
             int fieldX, int rowY, int fieldWidth, String title, String value) {
         EditBox box = new EditBox(font, fieldX, rowY, fieldWidth, 20, Component.literal(title));
@@ -341,8 +362,9 @@ public final class PriceSettingsScreen extends Screen {
     private boolean rememberSelectedPrice() {
         try {
             if (unitPriceField != null && unitPriceField.active) {
-                draftPrices.put(
-                        itemIds.get(selectedItemIndex), Config.amount(unitPriceField.getValue()));
+                double value = Config.amount(unitPriceField.getValue());
+                draft.prices.put(displayedPriceItemId, value);
+                draftPriceInputs.put(displayedPriceItemId, unitPriceField.getValue());
             }
             return true;
         } catch (RuntimeException ex) {
@@ -352,28 +374,20 @@ public final class PriceSettingsScreen extends Screen {
     }
 
     private void selectItem(int delta) {
-        if (!rememberSelectedPrice()) {
-            return;
-        }
+        if (!rememberSelectedPrice()) return;
         selectedItemIndex = Math.floorMod(selectedItemIndex + delta, itemIds.size());
         rebuildWidgets();
     }
 
     private void toggleManual() {
-        if (!rememberSelectedPrice()) {
-            return;
-        }
+        if (draft.ironman || !rememberSelectedPrice()) return;
         String itemId = itemIds.get(selectedItemIndex);
-        if (manualPriceItems.contains(itemId)) {
-            if (!BazaarPrices.supports(itemId, tracker.config)) {
-                note = "No Bazaar price for this item; enter a manual value.";
-                return;
-            }
-            manualPriceItems.remove(itemId);
+        if (draft.isManualPrice(itemId)) {
+            draft.manualPriceItems.remove(itemId);
         } else {
-            draftPrices.put(itemId, draftPrice(itemId));
-            manualPriceItems.add(itemId);
-            draftPriceInputs.put(itemId, Double.toString(draftPrices.get(itemId)));
+            draft.prices.put(itemId, draft.lootPrice(itemId));
+            draft.manualPriceItems.add(itemId);
+            draftPriceInputs.put(itemId, Double.toString(draft.prices.get(itemId)));
         }
         rebuildWidgets();
     }
@@ -384,29 +398,42 @@ public final class PriceSettingsScreen extends Screen {
             return false;
         }
         try {
-            if (!rememberSelectedPrice()) {
-                return false;
+            captureWidgetDrafts();
+            // Validate the entire form before copying any setting into the live Config.
+            double fixedCrystalCost = Config.amount(fixedCrystalInput);
+            double callingCost = Config.amount(callingInput);
+            Map<String, Double> prices = new LinkedHashMap<>(draft.prices);
+            for (var input : draftPriceInputs.entrySet()) {
+                if (draft.isManualPrice(input.getKey())) {
+                    prices.put(input.getKey(), Config.amount(input.getValue()));
+                }
             }
-            // Validate all editable amounts before changing the live Config.
-            double
-                    fixedCrystalCost =
-                            Config.amount(
-                                    useRecipeCost
-                                            ? fixedCrystalInput
-                                            : crystalCostField.getValue()),
-                    callingCost = Config.amount(callingCostField.getValue());
             tracker.config.crystalCost = fixedCrystalCost;
             tracker.config.callingCost = callingCost;
             tracker.config.crystalConfigured = !useRecipeCost;
-            tracker.config.prices = new LinkedHashMap<>(draftPrices);
-            tracker.config.manualPriceItems = new LinkedHashSet<>(manualPriceItems);
-            tracker.config.autoBazaar = draftAutoBazaar;
+            tracker.config.prices = prices;
+            tracker.config.manualPriceItems = new LinkedHashSet<>(draft.manualPriceItems);
+            tracker.config.autoBazaar = draft.autoBazaar;
+            tracker.config.bazaarMode = draft.bazaarMode;
+            tracker.config.ironman = draft.ironman;
+            tracker.config.npcDefaultsVersion = draft.npcDefaultsVersion;
+            tracker.config.salvageArmor = draft.salvageArmor;
+            tracker.config.salvageWeapons = draft.salvageWeapons;
+            tracker.config.scavengerCoins = draft.scavengerCoins;
             tracker.saveConfig();
             if (!"".equals(tracker.error)) {
                 storageError();
                 return false;
             }
-            return true;
+            draft.prices = new LinkedHashMap<>(prices);
+            draft.crystalCost = fixedCrystalCost;
+            draft.callingCost = callingCost;
+            draft.crystalConfigured = !useRecipeCost;
+            if (!draft.ironman
+                    && BazaarPrices.GLOBAL.tick(tracker.config, System.currentTimeMillis())) {
+                tracker.saveConfig();
+            }
+            return "".equals(tracker.error);
         } catch (RuntimeException ex) {
             note = "Invalid price. Use a number from 0 to 1 trillion.";
             return false;
@@ -417,22 +444,19 @@ public final class PriceSettingsScreen extends Screen {
         note = "Storage error; prices were not saved. See Minecraft log.";
     }
 
-    private void refreshBazaar() {
-        if (BazaarPrices.GLOBAL.tick(tracker.config, System.currentTimeMillis())) {
-            tracker.saveConfig();
-        }
-    }
-
     @Override
     public void tick() {
-        if (!"".equals(tracker.error)) {
-            storageError();
-        }
+        if (!"".equals(tracker.error)) storageError();
+        // Cache refreshes may arrive while this screen is open; unsaved pricing choices stay local.
+        draft.bazaarPrices = new LinkedHashMap<>(tracker.config.bazaarPrices);
+        draft.bazaarSellOfferPrices = new LinkedHashMap<>(tracker.config.bazaarSellOfferPrices);
+        draft.bazaarUpdatedAt = tracker.config.bazaarUpdatedAt;
         if (unitPriceField != null && !unitPriceField.active) {
-            unitPriceField.setValue(Double.toString(draftPrice(itemIds.get(selectedItemIndex))));
+            unitPriceField.setValue(
+                    Double.toString(draft.lootPrice(itemIds.get(selectedItemIndex))));
         }
         if (crystalCostField != null && useRecipeCost) {
-            crystalCostField.setValue(Double.toString(tracker.config.recipeCost()));
+            crystalCostField.setValue(Double.toString(draft.recipeCost()));
         }
     }
 
@@ -448,74 +472,61 @@ public final class PriceSettingsScreen extends Screen {
         super.extractRenderState(graphics, mouseX, mouseY, delta);
         graphics.text(
                 font,
-                Component.literal("Prices")
-                        .withStyle(
-                                net.minecraft.ChatFormatting.YELLOW,
-                                net.minecraft.ChatFormatting.BOLD),
+                Component.literal("Prices").withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD),
                 panelX + 16,
                 panelY + 12,
                 Hud.WHITE,
                 true);
-        String bazaarStatus =
-                BazaarPrices.GLOBAL.status(tracker.config, System.currentTimeMillis());
-        String shortBazaarStatus = font.plainSubstrByWidth(bazaarStatus, 132);
-        graphics.text(
-                font,
-                shortBazaarStatus,
-                panelX + panelWidth - 148,
-                panelY + 33,
-                Graph.MUTED,
-                false);
-        if (mouseX >= panelX + panelWidth - 148
-                && mouseX < panelX + panelWidth - 16
-                && mouseY >= panelY + 30
-                && mouseY < panelY + 45) {
-            graphics.setTooltipForNextFrame(Component.literal(bazaarStatus), mouseX, mouseY);
-        }
         graphics.text(font, "Cost per Calling", panelX + 16, panelY + 78, Graph.MUTED, true);
+        String itemId = itemIds.get(selectedItemIndex);
         graphics.centeredText(
                 font,
-                font.plainSubstrByWidth(
-                        Catalog.name(itemIds.get(selectedItemIndex)), panelWidth - 92),
+                font.plainSubstrByWidth(Catalog.name(itemId), panelWidth - 92),
                 panelX + panelWidth / 2,
                 panelY + 101,
-                Hud.itemColor(itemIds.get(selectedItemIndex)));
-        String itemId = itemIds.get(selectedItemIndex), source;
-        if (GearValuation.supports(itemId) && GearValuation.salvaging(itemId, tracker.config)) {
-            source =
-                    "Salvage: "
-                            + Format.coins(tracker.config.lootPrice(itemId))
-                            + " coins in 5 Spider Essence. Field keeps your NPC value.";
-        } else if (manualPriceItems.contains(itemId)) {
-            source = "Manual: net coins per item. 0 = unpriced.";
-        } else if (!draftAutoBazaar) {
-            source = "Auto Bazaar is off; using your saved fallback price.";
-        } else if (tracker.config.selectedBazaarPrices().containsKey(itemId)) {
-            source =
-                    "Bazaar: "
-                            + tracker.config.bazaarMode.label().toLowerCase(Locale.ROOT)
-                            + " estimate, before tax."
-                            + (BazaarPrices.isStale(tracker.config, System.currentTimeMillis())
-                                    ? " (stale)"
-                                    : "");
-        } else {
-            source =
-                    "No "
-                            + tracker.config.bazaarMode.label().toLowerCase(Locale.ROOT)
-                            + " quote; using your saved fallback price.";
-        }
-        line(graphics, source, panelY + 148, mouseX, mouseY);
+                Hud.itemColor(itemId));
+        line(graphics, priceDescription(itemId), panelY + 148, mouseX, mouseY);
         line(graphics, note, panelY + 189, mouseX, mouseY);
+        if (mouseX >= panelX + 16
+                && mouseX < panelX + 148
+                && mouseY >= panelY + 28
+                && mouseY < panelY + 46) {
+            graphics.setTooltipForNextFrame(
+                    Component.literal(
+                            BazaarPrices.GLOBAL.status(draft, System.currentTimeMillis())),
+                    mouseX,
+                    mouseY);
+        }
         if (mouseX >= panelX + 16
                 && mouseX < panelX + 136
                 && mouseY >= panelY + 48
                 && mouseY < panelY + 68) {
             graphics.setTooltipForNextFrame(
                     Component.literal(
-                            "Recipe: 2 fragments + 16 enchanted eyes + 16 enchanted string, using effective item prices."),
+                            "Recipe: 2 fragments + 16 enchanted eyes + 16 enchanted string, using effective item prices. Fixed costs remain available in either pricing mode."),
                     mouseX,
                     mouseY);
         }
+    }
+
+    private String priceDescription(String itemId) {
+        if (draft.intentionalZeroLoot(itemId)) {
+            return GearValuation.supports(itemId)
+                    ? "Ironman salvage: counts kept; essence has no coin value."
+                    : "Ironman: counts kept; no NPC sale value or price warning.";
+        }
+        if (draft.ironman)
+            return NpcPrices.source(itemId) + " value. Saved market prices are kept.";
+        if (GearValuation.supports(itemId) && GearValuation.salvaging(itemId, draft)) {
+            return "Salvage: "
+                    + Format.coins(draft.lootPrice(itemId))
+                    + " coins in 5 essence. Field keeps the sale value.";
+        }
+        if (draft.isManualPrice(itemId))
+            return draft.lootPriceSource(itemId) + ": net coins per item. 0 = unpriced.";
+        return draft.lootPriceSource(itemId)
+                + " | "
+                + BazaarPrices.GLOBAL.status(draft, System.currentTimeMillis());
     }
 
     private void line(

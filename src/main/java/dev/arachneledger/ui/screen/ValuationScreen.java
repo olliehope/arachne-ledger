@@ -1,6 +1,7 @@
 package dev.arachneledger.ui.screen;
 
 import dev.arachneledger.client.ArachneLedger;
+import dev.arachneledger.config.Config;
 import dev.arachneledger.tracking.Tracker;
 import dev.arachneledger.ui.FlatButton;
 import dev.arachneledger.ui.Format;
@@ -13,15 +14,27 @@ import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-/** Separate, immediately saved choices keep the main price editor uncluttered. */
+/** Standalone choices save immediately; the price editor supplies its own unsaved draft. */
 public final class ValuationScreen extends Screen {
     private final Screen parent;
     private final Tracker tracker = ArachneLedger.tracker;
+    private final Config choices;
+    private final boolean saveImmediately;
     private int panelX, panelY, panelWidth;
 
     public ValuationScreen(Screen parent) {
+        this(parent, ArachneLedger.tracker.config, true);
+    }
+
+    public ValuationScreen(Screen parent, Config draft) {
+        this(parent, draft, false);
+    }
+
+    private ValuationScreen(Screen parent, Config choices, boolean saveImmediately) {
         super(Component.literal("Arachne gear values"));
         this.parent = parent;
+        this.choices = choices;
+        this.saveImmediately = saveImmediately;
     }
 
     @Override
@@ -31,16 +44,16 @@ public final class ValuationScreen extends Screen {
         panelY = Math.max(6, (height - 218) / 2);
         modeButton(
                 panelY + 49,
-                tracker.config.salvageArmor,
+                choices.salvageArmor,
                 () -> {
-                    tracker.config.salvageArmor = !tracker.config.salvageArmor;
+                    choices.salvageArmor = !choices.salvageArmor;
                     changed();
                 });
         modeButton(
                 panelY + 97,
-                tracker.config.salvageWeapons,
+                choices.salvageWeapons,
                 () -> {
-                    tracker.config.salvageWeapons = !tracker.config.salvageWeapons;
+                    choices.salvageWeapons = !choices.salvageWeapons;
                     changed();
                 });
         var coins =
@@ -49,12 +62,10 @@ public final class ValuationScreen extends Screen {
                         panelY + 171,
                         panelWidth - 32,
                         18,
-                        tracker.config.scavengerCoins
-                                ? "Scavenger coins: on"
-                                : "Scavenger coins: off",
-                        tracker.config.scavengerCoins,
+                        choices.scavengerCoins ? "Scavenger coins: on" : "Scavenger coins: off",
+                        choices.scavengerCoins,
                         () -> {
-                            tracker.config.scavengerCoins = !tracker.config.scavengerCoins;
+                            choices.scavengerCoins = !choices.scavengerCoins;
                             changed();
                         });
         coins.setTooltip(
@@ -91,7 +102,7 @@ public final class ValuationScreen extends Screen {
     }
 
     private void changed() {
-        tracker.saveConfig();
+        if (saveImmediately) tracker.saveConfig();
         rebuildWidgets();
     }
 
@@ -130,42 +141,61 @@ public final class ValuationScreen extends Screen {
                 panelY + 12,
                 Hud.WHITE,
                 true);
-        line(graphics, "Choose how you value unupgraded drops.", panelY + 31, mouseX, mouseY);
+        line(
+                graphics,
+                choices.ironman
+                        ? "Ironman: salvage keeps counts with no coin value."
+                        : "Choose how you value unupgraded drops.",
+                panelY + 31,
+                mouseX,
+                mouseY);
         graphics.text(font, "Armor", panelX + 16, panelY + 55, Hud.WHITE, true);
         line(
                 graphics,
-                tracker.config.salvageArmor
-                        ? "Each piece: "
-                                + Format.coins(tracker.config.lootPrice("ARACHNE_HELMET"))
-                                + " coins in essence"
-                        : "NPC: 2,000 each. Saved price overrides apply.",
+                choices.salvageArmor
+                        ? choices.ironman
+                                ? "5 essence each; excluded from coin totals."
+                                : "Each piece: "
+                                        + Format.coins(choices.lootPrice("ARACHNE_HELMET"))
+                                        + " coins in essence"
+                        : choices.ironman
+                                ? "NPC: 2,000 each. Market prices are kept."
+                                : "NPC: 2,000 each. Saved price overrides apply.",
                 panelY + 78,
                 mouseX,
                 mouseY);
         graphics.text(font, "Tools / weapons", panelX + 16, panelY + 103, Hud.WHITE, true);
         line(
                 graphics,
-                tracker.config.salvageWeapons
-                        ? "Arack: "
-                                + Format.coins(tracker.config.lootPrice("ARACK"))
-                                + " coins in essence"
-                        : "Arack NPC: 5,000. Saved price overrides apply.",
+                choices.salvageWeapons
+                        ? choices.ironman
+                                ? "5 essence each; excluded from coin totals."
+                                : "Arack: "
+                                        + Format.coins(choices.lootPrice("ARACK"))
+                                        + " coins in essence"
+                        : choices.ironman
+                                ? "Arack NPC: 5,000. Market prices are kept."
+                                : "Arack NPC: 5,000. Saved price overrides apply.",
                 panelY + 126,
                 mouseX,
                 mouseY);
         line(
                 graphics,
-                "Spider Essence: "
-                        + Format.coins(tracker.config.price("ESSENCE_SPIDER"))
-                        + " each ("
-                        + tracker.config.priceSource("ESSENCE_SPIDER")
-                        + ")",
+                choices.ironman
+                        ? "Spider Essence: excluded; no missing-price warning."
+                        : "Spider Essence: "
+                                + Format.coins(choices.price("ESSENCE_SPIDER"))
+                                + " each ("
+                                + choices.priceSource("ESSENCE_SPIDER")
+                                + ")",
                 panelY + 147,
                 mouseX,
                 mouseY);
         line(
                 graphics,
-                "Future drops only; use Reprice for this session.",
+                saveImmediately
+                        ? "Future drops only; use Reprice for this session."
+                        : "Done returns to Prices; Save applies these choices.",
                 panelY + 160,
                 mouseX,
                 mouseY);
@@ -178,7 +208,7 @@ public final class ValuationScreen extends Screen {
 
     @Override
     public void onClose() {
-        tracker.saveConfig();
+        if (saveImmediately) tracker.saveConfig();
         minecraft.setScreen(parent);
     }
 }

@@ -21,6 +21,10 @@ Joining mid-fight can recover tracking from fresh boss activity, but the origina
 
 **Net profit = recorded loot value + coin income − all recorded costs.** Values are estimates based on the chosen prices, rather than completed sales. Scavenger income is already included; do not add it again.
 
+Base prices use NPC sale values or George's pet sale values. **Ironman** uses those values for future loot and excludes Spider Essence, Arachne Shards, and gear selected for salvage from coin revenue. Their quantities still count, and these intentionally excluded drops do not trigger missing-price warnings. Configured summon costs still subtract from profit.
+
+Changing prices or pricing modes leaves recorded values untouched. **Reprice session** deliberately applies your current pricing choices to the current session; older sessions and captured recaps retain their saved values.
+
 Actual hourly rates divide the selected session or lifetime value by its active time. Projected rates use the **current session's latest five active minutes**, or its elapsed active time if shorter. A projection needs at least 60 active seconds and one qualifying kill in that window. It always uses recent session pace, even when displaying lifetime totals. A small sample or rare drop can move it sharply.
 
 **Profit without RNG** uses the same recorded journal and active clock, excluding the loot value of Epic/Legendary Tarantula Pets and Arachne Fangs. It keeps normal loot, Scavenger and other coin income, and all Crystal, Calling, and other costs. These optional HUD rows show a baseline alongside jackpot-inclusive earnings; they do not discard drops or change the graph's existing metrics. Unpriced RNG drops contribute zero to both values.

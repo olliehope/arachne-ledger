@@ -26,18 +26,11 @@ public final class GearValuation {
         return armor(id) ? config.salvageArmor : weapon(id) && config.salvageWeapons;
     }
 
-    // Wiki: armor 2,000 each; Arack 5,000. Both salvage into 5 Spider Essence.
-    // https://hypixel-skyblock.fandom.com/wiki/Arachne%27s_Armor
-    // https://hypixel-skyblock.fandom.com/wiki/Arack
-    // https://wiki.hypixel.net/Salvaging
+    // Hypixel's item data supplies NPC prices and five-essence salvage for base gear.
+    // https://api.hypixel.net/v2/resources/skyblock/items
     public static double npcPrice(String id) {
-        if (armor(id)) {
-            return 2_000;
-        }
-        if (weapon(id)) {
-            return 5_000;
-        }
-        throw new IllegalArgumentException("Unsupported gear item.");
+        if (!supports(id)) throw new IllegalArgumentException("Unsupported gear item.");
+        return NpcPrices.price(id);
     }
 
     public static double price(String id, Config config) {
@@ -57,8 +50,9 @@ public final class GearValuation {
 
     public static String source(String id, Config config) {
         if (salvaging(id, config)) {
-            return "Salvage (5 Spider Essence)";
+            return config.ironman ? "Excluded salvage (Ironman)" : "Salvage (5 Spider Essence)";
         }
+        if (config.ironman) return "NPC sale";
         return config.isManualPrice(id)
                         && config.prices.containsKey(id)
                         && Double.compare(config.price(id), npcPrice(id)) != 0

@@ -23,7 +23,7 @@ Features include:
 
 - session and lifetime earnings, coins per hour, and projected profit per hour;
 - customizable profit graphs and Minimal, Classic, or Split HUD layouts;
-- Bazaar instant-sell and sell-offer pricing, NPC prices, and salvage values;
+- Bazaar instant-sell and sell-offer pricing, NPC and George pet prices, Ironman mode, and salvage values;
 - Tarantula Pet and Arachne Fang RNG drop alerts; and
 - Arachne achievements, session recaps, personal records, and fight history.
 

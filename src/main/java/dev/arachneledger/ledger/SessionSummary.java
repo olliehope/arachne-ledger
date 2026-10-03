@@ -96,7 +96,7 @@ public final class SessionSummary {
                 }
                 case EXPENSE -> otherSpend += entry.cost();
                 case LOOT -> {
-                    if (entry.unit() == 0) {
+                    if (entry.unpriced()) {
                         unpriced += entry.count();
                     }
                 }

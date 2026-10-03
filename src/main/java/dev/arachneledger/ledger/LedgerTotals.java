@@ -15,6 +15,7 @@ import java.util.Map;
 final class LedgerTotals {
     private final long timeOrigin;
     private final Map<String, Long> lootCounts = new LinkedHashMap<>();
+    private final Map<String, Long> unpricedLoot = new LinkedHashMap<>();
     private final Map<String, Double> lootRevenue = new LinkedHashMap<>();
     private final List<Ledger.Point> graph = new ArrayList<>();
     private double revenue;
@@ -43,8 +44,9 @@ final class LedgerTotals {
             case LOOT -> {
                 lootCounts.merge(entry.item(), entry.count(), Long::sum);
                 lootRevenue.merge(entry.item(), entryIncome, Double::sum);
-                if (entry.unit() == 0) {
+                if (entry.unpriced()) {
                     unpriced += entry.count();
+                    unpricedLoot.merge(entry.item(), entry.count(), Long::sum);
                 }
             }
             case CRYSTAL -> {
@@ -77,7 +79,8 @@ final class LedgerTotals {
                 elapsed,
                 Collections.unmodifiableMap(new LinkedHashMap<>(lootCounts)),
                 List.copyOf(graph),
-                unpriced);
+                unpriced,
+                unpricedLoot);
     }
 
     Analytics.Spending spending() {
