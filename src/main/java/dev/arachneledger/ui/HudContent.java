@@ -1,5 +1,6 @@
 package dev.arachneledger.ui;
 
+import dev.arachneledger.achievement.Achievements;
 import dev.arachneledger.config.HudPreferences;
 import dev.arachneledger.config.HudRowOrder;
 import dev.arachneledger.ledger.Analytics;
@@ -18,6 +19,60 @@ import java.util.Locale;
  * Builds display rows from journal totals. Hiding a row never removes a receipt or changes a rate.
  */
 public final class HudContent {
+    private static final Cache CACHE = new Cache();
+
+    /** One overlay is rendered at a time; history work scales with mutations, never FPS. */
+    public static final class Cache {
+        private Tracker tracker;
+        private Ledger ledger;
+        private long revision = -1, activeSecond = -1, achievementRevision = -1;
+        private boolean total;
+        private String status;
+        private HudPreferences preferences;
+        private Snapshot snapshot;
+        private Achievements.Snapshot achievements;
+        private long achievementLedgerRevision = -1;
+
+        public Snapshot get(Tracker current) {
+            return get(current, current.config.hudPreferences);
+        }
+
+        public Snapshot get(Tracker current, HudPreferences selected) {
+            long second = current.ledger.activeMillis / 1_000;
+            String currentStatus = status(current);
+            if (snapshot == null
+                    || tracker != current
+                    || ledger != current.ledger
+                    || revision != current.ledger.revision()
+                    || activeSecond != second
+                    || total != current.config.total
+                    || !currentStatus.equals(status)
+                    || achievementRevision != current.ledger.achievements.revision()
+                    || !selected.sameDisplay(preferences)) {
+                if (ledger != current.ledger
+                        || achievementLedgerRevision != current.ledger.revision()
+                        || achievementRevision != current.ledger.achievements.revision()) {
+                    achievements = null;
+                }
+                if (!selected.pinnedAchievement.isEmpty() && achievements == null) {
+                    achievements =
+                            Achievements.snapshot(current.ledger, current.ledger.achievements);
+                    achievementLedgerRevision = current.ledger.revision();
+                }
+                tracker = current;
+                ledger = current.ledger;
+                revision = current.ledger.revision();
+                activeSecond = second;
+                achievementRevision = current.ledger.achievements.revision();
+                total = current.config.total;
+                status = currentStatus;
+                preferences = selected.copy();
+                snapshot = buildRows(current, selected, achievements);
+            }
+            return snapshot;
+        }
+    }
+
     /** A text segment lets compact rows retain rarity, quantity and rate colors independently. */
     public record Part(String text, int color) {}
 
@@ -45,7 +100,15 @@ public final class HudContent {
     }
 
     public static Snapshot build(Tracker tracker) {
-        HudPreferences preferences = tracker.config.hudPreferences;
+        return CACHE.get(tracker);
+    }
+
+    public static Snapshot build(Tracker tracker, HudPreferences preferences) {
+        return CACHE.get(tracker, preferences);
+    }
+
+    private static Snapshot buildRows(
+            Tracker tracker, HudPreferences preferences, Achievements.Snapshot achievements) {
         boolean lootLedger = preferences.layout == HudPreferences.Layout.LOOT;
         Ledger.Stats stats = tracker.ledger.stats(tracker.config.total);
         Analytics.Snapshot analytics = tracker.ledger.analytics(tracker.config.total);
@@ -181,12 +244,40 @@ public final class HudContent {
                             Hud.TITLE,
                             Hud.TITLE));
         }
+        if (achievements != null && !preferences.pinnedAchievement.isEmpty()) {
+            for (Achievements.Progress progress : achievements.progress()) {
+                if (progress.definition().id().equals(preferences.pinnedAchievement)) {
+                    metrics.add(
+                            metric(
+                                    "pinned",
+                                    progress.definition().title(),
+                                    progress.earned() ? "Unlocked" : progressText(progress),
+                                    progress.earned() ? Graph.GREEN : Hud.GOLD));
+                    break;
+                }
+            }
+        }
         List<String> order = HudRowOrder.normalize(preferences.rowOrder);
         Comparator<Row> byDisplayOrder =
                 Comparator.comparingInt(row -> order.indexOf(orderKey(row)));
         rewards.sort(byDisplayOrder);
         metrics.sort(byDisplayOrder);
         return new Snapshot(rewards, metrics);
+    }
+
+    private static String progressText(Achievements.Progress progress) {
+        if (progress.definition().metric()
+                == dev.arachneledger.achievement.AchievementDefinition.Metric.FASTEST_KILL) {
+            return progress.value() <= 0
+                    ? "--"
+                    : String.format(
+                            Locale.ROOT,
+                            "%.1fs / %.0fs",
+                            progress.value() / 1_000.0,
+                            progress.definition().target() / 1_000.0);
+        }
+        return String.format(
+                Locale.ROOT, "%,d / %,d", progress.value(), progress.definition().target());
     }
 
     private static String orderKey(Row row) {

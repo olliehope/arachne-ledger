@@ -11,7 +11,7 @@ import java.util.Set;
 
 /** Data-driven milestones. Evaluation changes only persistent unlock state, never accounting. */
 public final class Achievements {
-    private static final int CATALOG_VERSION = 2;
+    private static final int CATALOG_VERSION = 3;
     public static final List<AchievementDefinition> DEFINITIONS = definitions();
 
     public record Unlock(AchievementDefinition definition, long earnedAt) {
@@ -97,6 +97,24 @@ public final class Achievements {
 
     private static List<AchievementDefinition> definitions() {
         List<AchievementDefinition> definitions = new ArrayList<>();
+        definitions.add(
+                new AchievementDefinition(
+                        "arachne_non",
+                        "Real Arachne Non",
+                        "Visit Arachne's Sanctuary with the tracker active.",
+                        Category.WELCOME,
+                        Metric.SANCTUARY_VISIT,
+                        1,
+                        false));
+        definitions.add(
+                new AchievementDefinition(
+                        "kill_first",
+                        "One Down, Eight Legs",
+                        "Complete your first counted Arachne fight.",
+                        Category.HUNTING,
+                        Metric.COUNTED_KILLS,
+                        1,
+                        false));
         tiers(
                 definitions,
                 "kills",
@@ -104,7 +122,26 @@ public final class Achievements {
                 "Complete %s counted Arachne fights.",
                 Category.HUNTING,
                 Metric.COUNTED_KILLS,
+                new long[] {10, 25, 100},
                 new long[] {10, 100, 1_000});
+        definitions.add(
+                new AchievementDefinition(
+                        "kills_250",
+                        "Sanctuary Regular",
+                        "Complete 250 counted Arachne fights.",
+                        Category.HUNTING,
+                        Metric.COUNTED_KILLS,
+                        250,
+                        false));
+        definitions.add(
+                new AchievementDefinition(
+                        "kills_challenge_1000",
+                        "Arachne's Landlord",
+                        "Optional challenge: complete 1,000 counted Arachne fights.",
+                        Category.HUNTING,
+                        Metric.COUNTED_KILLS,
+                        1_000,
+                        false));
         tiers(
                 definitions,
                 "crystals",
@@ -112,7 +149,17 @@ public final class Achievements {
                 "Place %s of your own Arachne Crystals.",
                 Category.SUMMONING,
                 Metric.CRYSTAL_PLACEMENTS,
+                new long[] {1, 5, 25},
                 new long[] {10, 100, 500});
+        definitions.add(
+                new AchievementDefinition(
+                        "crystals_challenge_100",
+                        "Ritual Regular",
+                        "Optional challenge: place 100 of your own Arachne Crystals.",
+                        Category.SUMMONING,
+                        Metric.CRYSTAL_PLACEMENTS,
+                        100,
+                        false));
         tiers(
                 definitions,
                 "silk",
@@ -120,6 +167,7 @@ public final class Achievements {
                 "Collect %s Soul String.",
                 Category.COLLECTION,
                 Metric.SOUL_STRING,
+                new long[] {100, 1_000, 10_000},
                 new long[] {1_000, 10_000, 100_000});
         definitions.add(
                 new AchievementDefinition(
@@ -137,6 +185,7 @@ public final class Achievements {
                 "Collect %s Arachne Fangs.",
                 Category.RARE,
                 Metric.FANGS,
+                new long[] {1, 5, 25},
                 new long[] {1, 10, 100});
         definitions.add(
                 new AchievementDefinition(
@@ -154,6 +203,7 @@ public final class Achievements {
                 "Complete %s counted Arachne fights in a row without a Tarantula Pet.",
                 Category.RARE,
                 Metric.PET_DRY_STREAK,
+                new long[] {20, 50, 100},
                 new long[] {100, 500, 1_000});
         tiers(
                 definitions,
@@ -162,12 +212,14 @@ public final class Achievements {
                 "Complete %s counted Arachne fights in a row without an Arachne Fang.",
                 Category.RARE,
                 Metric.FANG_DRY_STREAK,
+                new long[] {10, 25, 50},
                 new long[] {50, 100, 250});
-        long[] seconds = {60, 45, 30};
+        long[] seconds = {90, 60, 45};
+        long[] speedIds = {60, 45, 30};
         for (int index = 0; index < seconds.length; index++) {
             definitions.add(
                     new AchievementDefinition(
-                            "speed_" + seconds[index],
+                            "speed_" + speedIds[index],
                             "Speed Weaver " + roman(index),
                             "Complete a qualifying fight in "
                                     + seconds[index]
@@ -186,6 +238,7 @@ public final class Achievements {
         return List.copyOf(definitions);
     }
 
+    /** Persisted IDs stay stable when a later catalog makes its targets more accessible. */
     private static void tiers(
             List<AchievementDefinition> definitions,
             String id,
@@ -193,12 +246,13 @@ public final class Achievements {
             String description,
             Category category,
             Metric metric,
-            long[] targets) {
+            long[] targets,
+            long[] savedIds) {
         for (int index = 0; index < targets.length; index++) {
             long target = targets[index];
             definitions.add(
                     new AchievementDefinition(
-                            id + "_" + target,
+                            id + "_" + savedIds[index],
                             name + " " + roman(index),
                             description.formatted(
                                     String.format(java.util.Locale.ROOT, "%,d", target)),

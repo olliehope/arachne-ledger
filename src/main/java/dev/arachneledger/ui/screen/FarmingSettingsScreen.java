@@ -15,7 +15,7 @@ public final class FarmingSettingsScreen extends SettingsListScreen {
     private int selectedTab;
 
     public FarmingSettingsScreen(Screen parent) {
-        super(parent, "Farming cues", "Save applies all tabs. Back discards your changes.");
+        super(parent, "Farming cues", "Save applies all tabs. Cancel discards your changes.");
         draft = tracker.config.farming.copy();
         draft.validate();
     }
@@ -206,7 +206,7 @@ public final class FarmingSettingsScreen extends SettingsListScreen {
                         panelY + panelHeight - 24,
                         buttonWidth,
                         20,
-                        "Back",
+                        "Cancel",
                         false,
                         this::onClose));
     }

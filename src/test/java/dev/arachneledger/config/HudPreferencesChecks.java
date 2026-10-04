@@ -401,7 +401,7 @@ public final class HudPreferencesChecks {
                 !HudRowOrder.canMove(original, "profit", -1),
                 "The first summary row cannot move into the reward group");
         yes(
-                !HudRowOrder.canMove(original, "regularHourly", 1),
+                !HudRowOrder.canMove(original, "pinned", 1),
                 "The last summary row cannot move past its group");
         yes(!HudRowOrder.canMove(original, "unknown", 1), "Unknown keys cannot be moved");
         yes(!HudRowOrder.canMove(original, "profit", 0), "A zero direction is a no-op");

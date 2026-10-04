@@ -19,7 +19,7 @@ public final class Format {
     }
 
     public static String time(long millis) {
-        long seconds = millis / 1000;
+        long seconds = Math.max(0, millis) / 1000;
         return String.format(
                 Locale.ROOT, "%02d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60);
     }

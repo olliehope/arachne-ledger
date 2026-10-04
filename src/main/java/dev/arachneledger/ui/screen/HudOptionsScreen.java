@@ -2,6 +2,7 @@ package dev.arachneledger.ui.screen;
 
 import dev.arachneledger.config.Config;
 import dev.arachneledger.config.HudPreferences;
+import dev.arachneledger.config.HudPreset;
 import dev.arachneledger.config.HudRowOrder;
 import dev.arachneledger.skyblock.Catalog;
 import dev.arachneledger.ui.FlatButton;
@@ -14,14 +15,19 @@ import java.util.List;
 /** Individual text-HUD choices. Visibility filters never alter the recorded ledger. */
 public final class HudOptionsScreen extends SettingsListScreen {
     private int selectedTab;
+    private final Config draft = new Config();
+    private final Config target;
 
     public HudOptionsScreen(Screen parent) {
-        super(parent, "HUD options", "Display only; recorded totals stay unchanged.");
+        super(parent, "HUD options", "Save applies all tabs. Cancel discards changes.");
+        target = parent instanceof HudEditorScreen editor ? editor.draftConfig() : tracker.config;
+        HudPreset.capture("Draft", target).apply(draft);
+        draft.hudPresets = HudPreset.normalize(target.hudPresets);
     }
 
     @Override
     protected void addHeaderControls() {
-        String[] labels = {"Rows", "Items", "Display", "Order"};
+        String[] labels = {"Rows", "Items", "Layout", "Order", "Saved"};
         int tabWidth = Math.min(58, (panelWidth - 96) / labels.length);
         for (int index = 0; index < labels.length; index++) {
             int tab = index;
@@ -47,12 +53,13 @@ public final class HudOptionsScreen extends SettingsListScreen {
             case 1 -> itemOptions();
             case 2 -> displayOptions();
             case 3 -> orderOptions();
+            case 4 -> savedOptions();
             default -> rowOptions();
         };
     }
 
     private List<Option> rowOptions() {
-        HudPreferences preferences = tracker.config.hudPreferences;
+        HudPreferences preferences = draft.hudPreferences;
         return List.of(
                 toggle(
                         "Title",
@@ -140,6 +147,21 @@ public final class HudOptionsScreen extends SettingsListScreen {
                         "Show the selected scope. Switch scope in the dashboard or with /arachne session and /arachne total.",
                         () -> preferences.showScope = !preferences.showScope),
                 toggle(
+                        "Spawn countdown",
+                        preferences.showCountdown,
+                        "Show an estimated countdown on the HUD independently of pedestal visibility.",
+                        () -> preferences.showCountdown = !preferences.showCountdown),
+                new Option(
+                        "Pinned achievement",
+                        preferences.pinnedAchievement.isEmpty() ? "None" : "Clear",
+                        false,
+                        tracker.error.isEmpty(),
+                        "Click an achievement in Progress to pin it. Clear removes the goal from the HUD.",
+                        () -> {
+                            preferences.pinnedAchievement = "";
+                            changed();
+                        }),
+                toggle(
                         "Unpriced warning",
                         preferences.showUnpricedWarning,
                         "Show how many recorded drops have no saved value.",
@@ -147,7 +169,7 @@ public final class HudOptionsScreen extends SettingsListScreen {
     }
 
     private List<Option> orderOptions() {
-        HudPreferences preferences = tracker.config.hudPreferences;
+        HudPreferences preferences = draft.hudPreferences;
         List<Option> rows = new ArrayList<>();
         rows.add(
                 new Option(
@@ -192,13 +214,13 @@ public final class HudOptionsScreen extends SettingsListScreen {
     }
 
     private void moveRow(String id, int direction) {
-        HudPreferences preferences = tracker.config.hudPreferences;
+        HudPreferences preferences = draft.hudPreferences;
         preferences.rowOrder = HudRowOrder.move(preferences.rowOrder, id, direction);
         changed();
     }
 
     private List<Option> itemOptions() {
-        HudPreferences preferences = tracker.config.hudPreferences;
+        HudPreferences preferences = draft.hudPreferences;
         List<Option> rows = new ArrayList<>();
         rows.add(
                 new Option(
@@ -259,24 +281,24 @@ public final class HudOptionsScreen extends SettingsListScreen {
     }
 
     private List<Option> displayOptions() {
-        HudPreferences preferences = tracker.config.hudPreferences;
+        HudPreferences preferences = draft.hudPreferences;
         List<Option> rows = new ArrayList<>();
         rows.add(
                 toggle(
                         "Overlay",
-                        tracker.config.hud,
+                        draft.hud,
                         "Show or hide the live HUD.",
-                        () -> tracker.config.hud = !tracker.config.hud));
+                        () -> draft.hud = !draft.hud));
         rows.add(
                 new Option(
                         "HUD type",
-                        tracker.config.hudView == Config.View.GRAPH ? "Graph" : "Text",
+                        draft.hudView == Config.View.GRAPH ? "Graph" : "Text",
                         false,
                         tracker.error.isEmpty(),
                         "Switch between the text tracker and graph. Graph text is configured in Graph options.",
                         () -> {
-                            tracker.config.hudView =
-                                    tracker.config.hudView == Config.View.GRAPH
+                            draft.hudView =
+                                    draft.hudView == Config.View.GRAPH
                                             ? Config.View.DETAILED
                                             : Config.View.GRAPH;
                             changed();
@@ -292,7 +314,7 @@ public final class HudOptionsScreen extends SettingsListScreen {
                             HudPreferences.Layout[] choices = HudPreferences.Layout.values();
                             preferences.layout =
                                     choices[(preferences.layout.ordinal() + 1) % choices.length];
-                            tracker.config.hudView = Config.View.DETAILED;
+                            draft.hudView = Config.View.DETAILED;
                             changed();
                         }));
         for (HudPreferences.Layout preset :
@@ -313,27 +335,27 @@ public final class HudOptionsScreen extends SettingsListScreen {
                                     + ": resets row toggles, row order, item filters, sorting and the loot-row limit. Position and scale are kept.",
                             () -> {
                                 preferences.applyPreset(preset);
-                                tracker.config.hudView = Config.View.DETAILED;
+                                draft.hudView = Config.View.DETAILED;
                                 changed();
                             }));
         }
         rows.add(
                 new Option(
                         "Show in",
-                        tracker.config.hudAlwaysShow ? "SkyBlock" : "Arena only",
-                        tracker.config.hudAlwaysShow,
+                        draft.hudAlwaysShow ? "SkyBlock" : "Arena only",
+                        draft.hudAlwaysShow,
                         tracker.error.isEmpty(),
                         "Show throughout SkyBlock, or only while Arachne tracking is active.",
                         () -> {
-                            tracker.config.hudAlwaysShow = !tracker.config.hudAlwaysShow;
+                            draft.hudAlwaysShow = !draft.hudAlwaysShow;
                             changed();
                         }));
         rows.add(
                 toggle(
                         "Background",
-                        tracker.config.hudBackground,
+                        draft.hudBackground,
                         "Add a subtle background behind the overlay.",
-                        () -> tracker.config.hudBackground = !tracker.config.hudBackground));
+                        () -> draft.hudBackground = !draft.hudBackground));
         rows.add(
                 new Option(
                         "Move / resize",
@@ -341,15 +363,109 @@ public final class HudOptionsScreen extends SettingsListScreen {
                         false,
                         true,
                         "Drag the actual overlay and scroll to resize it.",
-                        () -> minecraft.setScreen(new HudEditorScreen(this))));
+                        () -> minecraft.setScreen(new HudEditorScreen(this, draft))));
+        return rows;
+    }
+
+    private List<Option> savedOptions() {
+        List<Option> rows = new ArrayList<>();
         rows.add(
                 new Option(
-                        "Graph rows / lines",
-                        "Graph options",
+                        "Save this HUD as a named preset",
+                        "New preset",
                         false,
-                        true,
-                        "Choose each graph metric, text row, projection and spawn marker.",
-                        () -> minecraft.setScreen(new GraphOptionsScreen(this))));
+                        tracker.error.isEmpty() && draft.hudPresets.size() < HudPreset.LIMIT,
+                        "Save all HUD rows, item filters, position, size and background. Up to 12 presets.",
+                        () ->
+                                minecraft.setScreen(
+                                        new HudPresetNameScreen(
+                                                this,
+                                                "My HUD",
+                                                name -> {
+                                                    if (draft.hudPresets.stream()
+                                                            .anyMatch(
+                                                                    p ->
+                                                                            p.name.equalsIgnoreCase(
+                                                                                    name))) {
+                                                        note =
+                                                                "That name is already saved. Delete it before replacing it.";
+                                                    } else {
+                                                        draft.hudPresets.add(
+                                                                HudPreset.capture(name, draft));
+                                                        note =
+                                                                "Preset added to your draft. Save to keep it.";
+                                                    }
+                                                    rebuildWidgets();
+                                                }))));
+        for (HudPreset saved : draft.hudPresets) {
+            rows.add(
+                    new Option(
+                            saved.name,
+                            "Apply",
+                            false,
+                            tracker.error.isEmpty(),
+                            "Apply this saved HUD to the draft. Save commits it; Cancel keeps your live HUD.",
+                            () -> {
+                                saved.apply(draft);
+                                changed();
+                            },
+                            new AdditionalAction(
+                                    "Delete",
+                                    tracker.error.isEmpty(),
+                                    "Remove this named preset when you Save.",
+                                    () -> {
+                                        draft.hudPresets.remove(saved);
+                                        changed();
+                                    })));
+        }
         return rows;
+    }
+
+    @Override
+    protected void changed() {
+        note = "Unsaved changes.";
+        rebuildWidgets();
+    }
+
+    @Override
+    protected void addFooterControls() {
+        int buttonWidth = (panelWidth - 36) / 2;
+        FlatButton save =
+                new FlatButton(
+                        panelX + 16,
+                        panelY + panelHeight - 24,
+                        buttonWidth,
+                        20,
+                        "Save",
+                        true,
+                        this::saveDraft);
+        save.active = tracker.error.isEmpty();
+        addRenderableWidget(save);
+        addRenderableWidget(
+                new FlatButton(
+                        panelX + 20 + buttonWidth,
+                        panelY + panelHeight - 24,
+                        buttonWidth,
+                        20,
+                        "Cancel",
+                        false,
+                        this::onClose));
+    }
+
+    private void saveDraft() {
+        if (!tracker.error.isEmpty()) return;
+        HudPreset previous = HudPreset.capture("Previous", target);
+        List<HudPreset> previousPresets = target.hudPresets;
+        HudPreset.capture("Draft", draft).apply(target);
+        target.hudPresets = HudPreset.normalize(draft.hudPresets);
+        if (target == tracker.config) tracker.saveConfig();
+        if (!tracker.error.isEmpty()) {
+            previous.apply(target);
+            target.hudPresets = previousPresets;
+            note = "Storage error; settings were not saved.";
+            rebuildWidgets();
+        } else {
+            onClose();
+        }
     }
 }

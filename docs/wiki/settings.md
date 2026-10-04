@@ -1,15 +1,18 @@
 # Settings
 
-Open **Settings** from the dashboard, run `/arachne settings`, or use Mod Menu's **Arachne Ledger → Configure** button. The hub contains **HUD**, **Tracking**, **Prices & salvage**, **Graph**, and **Farming cues**. Display and price choices do not erase your saved history.
+Open **Settings** from the dashboard, run `/arachne settings`, or use Mod Menu's **Arachne Ledger → Configure** button. The hub contains **HUD & layouts**, **Tracking & notifications**, **Prices & salvage**, **Graph & markers**, and **Timers & sounds**. Display and price choices do not erase your saved history.
 
 ## HUD
 
-Open **Settings → HUD** for four tabs:
+Open **Settings → HUD & layouts** for five tabs:
 
 - **Rows:** independently show or hide the title, total profit, profit/hour, projected/hour, profit without RNG, without RNG/hour, tracking status, loot items and their values, rare-drop rates, Scavenger coins, Crystal costs, Calling costs, kills, kills/hour, active time, scope, and unpriced warning. The two rows without RNG exclude Tarantula Pets and Arachne Fangs while keeping Scavenger coins and every recorded cost. Rates beside rare drops use observed rewards per counted kill; ordinary loot has no RNG percentage.
 - **Items:** choose 0–8 loot rows, sort by recorded value, quantity, or name, and show or hide individual items. Hidden items still contribute to totals and profit.
-- **Display:** choose Text or Graph, a text layout, visibility, and background. **Move / resize** opens the draggable preview; scroll over it to resize. `/arachne hud edit` also opens the editor.
+- **Layout:** choose Text or Graph, a text layout, visibility, and background. **Move / resize** opens the draggable preview; scroll over it to resize. `/arachne hud edit` also opens the editor.
 - **Order:** move rows **Up** or **Down** within Rewards or Summary. Loot items move as one block; individual item order still comes from **Items → Sort loot by**. Hidden rows retain their position. **Reset row order** restores the default order without changing visibility or item filters.
+- **Saved:** create up to 12 named HUD presets. Each retains rows, item filters, layout, position, scale, visibility, and background. Adding, applying, and deleting presets affect the draft until **Save**. Graph series remain in their own settings.
+
+HUD options and the move/resize editor both use **Save** and **Cancel**. Options opened inside the editor update its draft; save the editor to apply everything. The optional **Spawn countdown** row works independently of the world label. Click a revealed achievement in the achievement book to pin or unpin its progress.
 
 **Loot ledger** is the default for new settings, with aligned loot quantities and values followed by the money summary, Scavenger, kills, and active time. **Minimal** shows the key money stats and tracking status. **Classic** restores a fuller item-and-stat list. **Split** separates the item list from the summary. Updating preserves your selected layout and individual rows.
 
@@ -23,7 +26,7 @@ Set loot unit values and Calling costs on **Settings → Prices & salvage**. Bas
 
 **Ironman** uses NPC and George values, bypassing manual and Bazaar market prices. Spider Essence, Arachne Shards, and gear selected for salvage keep their drop counts with no coin value or missing-price warning. Switch Ironman off to restore your saved pricing choices. `/arachne ironman` toggles the mode; `/arachne ironman on|off` sets it explicitly. This is a valuation preference, not automatic SkyBlock profile detection.
 
-The price editor and its **Salvage** page share an unsaved draft. **Save** applies the whole form; **Back** discards it. Invalid amounts leave all choices unsaved. Market-price controls are disabled while Ironman is on, without clearing their saved values.
+The price editor and its **Salvage** page share an unsaved draft. **Save** applies the whole form; **Cancel** discards it. Invalid amounts leave all choices unsaved. Market-price controls are disabled while Ironman is on, without clearing their saved values.
 
 Crystals use the configured value of **2 Arachne Fragments + 16 Enchanted Spider Eyes + 16 Enchanted String** by default. Choose a fixed cost if you buy them at a different price. `/arachne crystal <coins>` sets that cost; `/arachne recipe` restores recipe valuation. Ironman recipe costs use the ingredients' NPC values; choose a fixed cost of **0** if you prefer not to count your own materials as a cost. Fixed Crystal and Calling costs are kept when changing modes.
 
@@ -46,7 +49,7 @@ These settings value drops; they do not sell or salvage items. Upgraded gear bon
 
 ## Notifications and participation
 
-Open **Settings → Tracking** to set minimum damage, kill chat, rare-drop titles, rare-drop values, Scavenger collection, session recap chat, and achievement notifications. Click **Save** to apply the whole form; **Back** discards unsaved changes. Damage must be a whole number from 1 to 1 trillion. Invalid input leaves all draft choices unsaved.
+Open **Settings → Tracking & notifications** to set minimum damage, kill chat, rare-drop titles, rare-drop values, Scavenger collection, session recap chat, and achievement notifications. Click **Save** to apply the whole form; **Cancel** discards unsaved changes. Damage must be a whole number from 1 to 1 trillion. Invalid input leaves all draft choices unsaved.
 
 The default minimum damage is **10,000**. `/arachne mindamage <damage>` also changes it for future fight results. `/arachne chat on|off` controls the local kill summary. Hiding the Scavenger HUD row does not disable Scavenger collection.
 
@@ -56,11 +59,11 @@ The default minimum damage is **10,000**. `/arachne mindamage <damage>` also cha
 
 ## Farming cues
 
-Open **Settings → Farming cues** for three tabs. **Save** applies every tab together; **Back** discards the draft. All cues are local to your client.
+Open **Settings → Timers & sounds** for three tabs. **Save** applies every tab together; **Cancel** discards the draft. All cues are local to your client.
 
 - **Pedestal:** toggle the estimated spawn countdown, elapsed fight time, visibility through walls, and adaptive Crystal timing. Adjust the Crystal and Calling fallback delays from 10–60 seconds, label size from 50–200%, and label range from 16–128 blocks.
 - **Alerts:** choose spawn titles and sounds, rare-drop sounds, and achievement titles and sounds separately. Existing achievements are not replayed after an update.
-- **Chat:** toggle rare-drop chat and compact kill summaries. Compact summaries retain the full rewards, costs, damage, and Scavenger details on hover. Enable kill chat itself under **Tracking**.
+- **Chat:** toggle rare-drop chat and compact kill summaries. Compact summaries retain the full rewards, costs, damage, and Scavenger details on hover. Enable kill chat itself under **Tracking & notifications**.
 
 The pedestal countdown begins on a detected Crystal or completed **4/4** Calling placement. Defaults are **40 seconds** for a Crystal and **19 seconds** for a Calling. Adaptive Crystal timing samples the first nearby dust burst after three seconds and estimates another **21 or 37 seconds**, usually about **24 or 40 seconds** from placement. Without a usable sample, it keeps your fallback. Actual spawn chat ends the estimate; reaching zero never counts a spawn or starts active fight time.
 
@@ -70,6 +73,6 @@ Rare-drop chat uses the item's rarity color and keeps the recorded value hidden 
 
 `/arachne session` and `/arachne total` choose the displayed scope. `/arachne new` begins a new session without deleting lifetime totals. `/arachne pause` stops automatic tracking and its active timer.
 
-Open **Journal → Recaps & records** from the dashboard, or run `/arachne recap`, for **Current**, **Last session**, and **Records**. Current and Records have their own Session/Total scope buttons. Last session is the frozen summary captured before the reset; the latest 20 active session summaries are saved. **Journal → RNG history** opens pet and fang intervals and observed rates. **Journal → Achievements** or `/arachne achievements` opens lifetime milestones. **Journal → Tracking diagnostics** or `/arachne diagnostics` opens the [diagnostics page](diagnostics.md). The graph tab keeps its Options button; switch to Overview, Drops, or Fights for Journal.
+Open **Progress → Recaps & records** from the dashboard, or run `/arachne recap`, for **Current**, **Last session**, and **Records**. Current and Records use the shared Session/Total selection. Last session is the frozen summary captured before the reset; the latest 20 active session summaries are saved. **Progress → RNG history** opens pet and fang intervals and observed rates. **Progress → Achievements** or `/arachne achievements` opens lifetime milestones. **Progress → Tracking diagnostics** or `/arachne diagnostics` opens the [diagnostics page](diagnostics.md). Progress is accessible from every dashboard tab, alongside **Options** in the graph view and **Copy** in other views.
 
 Saves are separate per Minecraft account. If you change SkyBlock profiles on the same account, use `/arachne profile <name>` to select a separate ledger. Profile names use 1–32 letters, digits, `_`, or `-`; the server profile is not selected automatically.

@@ -31,8 +31,8 @@ Open **Settings** from the dashboard or run `/arachne settings` to configure the
 
 Farm in **Arachne's Sanctuary** in Spider's Den. The tracker records your summon costs, observed rewards, and eligible purse gains. Choose **Session** or **Total** to switch the displayed scope. Starting a new session keeps lifetime history.
 
-Profit starts with NPC sell values and George's pet sell values. Open **Settings → Prices & salvage** to use Bazaar prices, set custom values, or enable **Ironman**. Ironman keeps unsellable reward counts without coin value or missing-price warnings. Save applies your choices to future drops; existing history keeps its recorded values. The default Minimal HUD keeps profit, hourly rates, and tracking status visible; customize it in **Settings → HUD**.
+Profit starts with NPC sell values and George's pet sell values. Open **Settings → Prices & salvage** to use Bazaar prices, set custom values, or enable **Ironman**. Ironman keeps unsellable reward counts without coin value or missing-price warnings. Save applies your choices to future drops; existing history keeps its recorded values. The default Loot ledger HUD aligns your rewards and money summary; customize it in **Settings → HUD & layouts**, or choose Minimal for fewer rows.
 
-Open **Journal** from the dashboard's Overview, Drops, or Fights tab for achievements, recaps and records, or tracking diagnostics.
+Open **Progress** from any dashboard tab for achievements, RNG history, T1/T2 comparisons, session targets, supplies, recaps, and diagnostics.
 
 For details, read [Settings](settings.md) and [Tracking and profit](tracking-and-profit.md). If something is missed, use [Diagnostics](diagnostics.md) and [Troubleshooting](troubleshooting.md).

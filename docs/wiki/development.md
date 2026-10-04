@@ -38,6 +38,10 @@ For a new achievement, add a stable entry in `Achievements.definitions()`; add a
 
 `FarmingEvents` and `PedestalTimer` hold optional farming cues separately from financial tracking. Timer zero is presentation only: actual server signals still control spawn, death, and active time. `FarmingPreferences` owns bounded timing and alert choices; the settings screen edits a copy before committing it. Keep sound, chat, and overlay delivery local, and preserve saved notification acknowledgments when preferences change.
 
+`GraphSamples.Index` builds range indexes once per immutable series; graph drawing uses bounded pixel columns that retain peaks and final steps. `HudContent.Cache` and `DashboardData` reuse immutable display snapshots. Financial caches retain Session and Total separately; recent projections share prefix sums and exact receipt-expiry boundaries. A live elapsed clock should not trigger a full-history walk on every frame.
+
+`SummonStats` compares qualified fights using the observed `FightRecord.summonTier`; missing legacy tiers stay Unknown. `SessionGoals`, `GoalProgress`, and `SessionGoalMonitor` separate preferences, session progress, and durable local notification acknowledgment. `Supplies` estimates personal consumption independently of the inventory reader. Keep these calculations independent of Minecraft and keep presets as detached configuration copies.
+
 Documentation sources are maintained in `docs/wiki` and built with MkDocs. The docs workflow automatically deploys documentation changes to [GitHub Pages](https://olliehope.github.io/arachne-ledger/); navigation and site settings live in the root `mkdocs.yml`.
 
 For a release, update the version and changelog, run a clean build, then upload the installable JAR to GitHub Releases or Modrinth.

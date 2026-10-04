@@ -140,25 +140,69 @@ public final class Ledger {
     public List<SessionSummary.Snapshot> sessionRecaps = new ArrayList<>();
 
     public long sessionId = 1;
+
+    /** Zero means no valid visit has been observed, including saves predating the welcome goal. */
+    public long sanctuaryVisitedAt;
+
+    /** Display-only completion acknowledgement survives corrections and account reloads. */
+    public SessionGoalMonitor.Acknowledgement sessionGoalAcknowledgement;
+
     public long nextFightId = 1;
     public long nextEntryId = 1;
     private transient long revision = 0;
-    private transient long cachedStatsRevision = -1;
-    private transient boolean cachedStatsTotalScope;
-    private transient Stats cachedStats;
-    private transient double cachedScavengerCoins;
-    private transient Analytics.Spending cachedSpending;
-    private transient Analytics.Snapshot cachedAnalytics;
-    private transient long cachedAnalyticsRevision = -1;
-    private transient long cachedAnalyticsActiveMillis = -1;
-    private transient boolean cachedAnalyticsTotalScope;
-    private transient ProfitBreakdown.Snapshot cachedProfitBreakdown;
-    private transient long cachedProfitRevision = -1;
-    private transient long cachedProfitActiveMillis = -1;
-    private transient boolean cachedProfitTotalScope;
+    private transient ScopeCache sessionCache = new ScopeCache();
+    private transient ScopeCache totalCache = new ScopeCache();
+    private transient RecentWindow recentWindow;
+    private transient long recentWindowRevision = -1;
+    private transient RecentWindow.Snapshot recentWindowSnapshot;
+    private transient long recentWindowActiveMillis = -1;
+
+    /**
+     * Each scope keeps its own derived values; alternating HUD/dashboard reads cannot thrash it.
+     */
+    private static final class ScopeCache {
+        long statsRevision = -1, analyticsRevision = -1, analyticsSecond = -1;
+        long profitRevision = -1, profitSecond = -1, summonRevision = -1;
+        Stats stats;
+        double scavengerCoins;
+        Analytics.Spending spending;
+        Analytics.Snapshot analytics;
+        ProfitBreakdown.Snapshot profit;
+        SummonStats.Snapshot summons;
+        RecentWindow.Snapshot analyticsWindow, profitWindow;
+    }
+
+    private ScopeCache scopeCache(boolean total) {
+        return total ? totalCache : sessionCache;
+    }
+
+    RecentWindow.Snapshot recentWindow() {
+        if (recentWindow == null || recentWindowRevision != revision) {
+            recentWindow = new RecentWindow(this);
+            recentWindowRevision = revision;
+            recentWindowActiveMillis = -1;
+        }
+        if (recentWindowSnapshot == null || recentWindowActiveMillis != activeMillis) {
+            recentWindowSnapshot = recentWindow.at(activeMillis);
+            recentWindowActiveMillis = activeMillis;
+        }
+        return recentWindowSnapshot;
+    }
 
     public long revision() {
         return revision;
+    }
+
+    /** Explicit metadata mutations invalidate immutable display snapshots just like receipts. */
+    public void historyChanged() {
+        revision++;
+    }
+
+    public boolean visitSanctuary(long now) {
+        if (sanctuaryVisitedAt > 0 || now <= 0) return false;
+        sanctuaryVisitedAt = now;
+        revision++;
+        return true;
     }
 
     public void tick(long delta) {
@@ -242,11 +286,16 @@ public final class Ledger {
     }
 
     public FightRecord beginFight(long spawned, long minimumDamage) {
+        return beginFight(spawned, minimumDamage, FightRecord.SummonTier.UNKNOWN);
+    }
+
+    public FightRecord beginFight(long spawned, long minimumDamage, FightRecord.SummonTier tier) {
         FightRecord record = new FightRecord();
         record.id = nextFightId++;
         record.session = sessionId;
         record.spawned = spawned;
         record.minimumDamage = minimumDamage;
+        record.summonTier = tier == null ? FightRecord.SummonTier.UNKNOWN : tier;
         record.activeStart = activeMillis;
         record.activeEnd = activeMillis;
         if (spawned > 0) {
@@ -277,6 +326,7 @@ public final class Ledger {
     }
 
     public void associateSummons(Collection<Long> ids, long fightId) {
+        if (ids.isEmpty()) return;
         Set<Long> selectedEntryIds = new HashSet<>(ids);
         for (int entryIndex = 0; entryIndex < entries.size(); entryIndex++) {
             Entry entry = entries.get(entryIndex);
@@ -346,7 +396,7 @@ public final class Ledger {
 
     public double scavengerCoins(boolean total) {
         stats(total);
-        return cachedScavengerCoins;
+        return scopeCache(total).scavengerCoins;
     }
 
     public double fightScavengerCoins(long id) {
@@ -556,69 +606,91 @@ public final class Ledger {
     }
 
     public Stats stats(boolean total) {
-        if (cachedStats == null
-                || cachedStatsRevision != revision
-                || cachedStatsTotalScope != total) {
-            rebuildStatsCache(total);
+        ScopeCache cache = scopeCache(total);
+        if (cache.stats == null || cache.statsRevision != revision) {
+            rebuildStatsCache(total, cache);
         }
 
         // Time changes between journal mutations, so the cached financial snapshot deliberately
         // excludes duration. Rates use the live active clock without rescanning old entries.
         return new Stats(
-                cachedStats.revenue,
-                cachedStats.costs,
-                cachedStats.crystals,
-                cachedStats.callings,
-                cachedStats.kills,
+                cache.stats.revenue,
+                cache.stats.costs,
+                cache.stats.crystals,
+                cache.stats.callings,
+                cache.stats.kills,
                 activeMillis - (total ? 0 : sessionMillis),
-                cachedStats.loot,
-                cachedStats.graph,
-                cachedStats.unpriced,
-                cachedStats.unpricedLoot);
+                cache.stats.loot,
+                cache.stats.graph,
+                cache.stats.unpriced,
+                cache.stats.unpricedLoot);
     }
 
-    private void rebuildStatsCache(boolean total) {
+    private void rebuildStatsCache(boolean total, ScopeCache cache) {
         long timeOrigin = total ? 0 : sessionMillis;
         int firstEntryIndex = total ? 0 : sessionStart;
         LedgerTotals totals = new LedgerTotals(timeOrigin);
         for (int entryIndex = firstEntryIndex; entryIndex < entries.size(); entryIndex++) {
             totals.include(entries.get(entryIndex));
         }
-        cachedStats = totals.stats(0);
-        cachedScavengerCoins = totals.scavengerCoins();
-        cachedSpending = totals.spending();
-        cachedStatsRevision = revision;
-        cachedStatsTotalScope = total;
+        cache.stats = totals.stats(0);
+        cache.scavengerCoins = totals.scavengerCoins();
+        cache.spending = totals.spending();
+        cache.statsRevision = revision;
     }
 
     /** Scope affects totals; projected pace always comes from this session's recent active time. */
     public Analytics.Snapshot analytics(boolean total) {
         Stats selected = stats(total);
-        if (cachedAnalytics == null
-                || cachedAnalyticsRevision != revision
-                || cachedAnalyticsActiveMillis != activeMillis
-                || cachedAnalyticsTotalScope != total) {
-            cachedAnalytics = Analytics.calculate(this, selected, cachedSpending);
-            cachedAnalyticsRevision = revision;
-            cachedAnalyticsActiveMillis = activeMillis;
-            cachedAnalyticsTotalScope = total;
+        ScopeCache cache = scopeCache(total);
+        RecentWindow.Snapshot window = recentWindow();
+        long second = activeMillis / 1_000;
+        if (cache.analytics == null
+                || cache.analyticsRevision != revision
+                || cache.analyticsSecond != second
+                || windowChanged(cache.analyticsWindow, window)) {
+            cache.analytics = Analytics.calculate(this, selected, cache.spending);
+            cache.analyticsRevision = revision;
+            cache.analyticsSecond = second;
+            cache.analyticsWindow = window;
         }
-        return cachedAnalytics;
+        return cache.analytics;
     }
 
     /** Reuse financial derivations across render frames; rates follow the live active clock. */
     public ProfitBreakdown.Snapshot profitBreakdown(boolean total) {
-        if (cachedProfitBreakdown == null
-                || cachedProfitRevision != revision
-                || cachedProfitTotalScope != total) {
-            cachedProfitBreakdown = ProfitBreakdown.calculate(this, total);
-            cachedProfitRevision = revision;
-            cachedProfitTotalScope = total;
-        } else if (cachedProfitActiveMillis != activeMillis) {
-            cachedProfitBreakdown = ProfitBreakdown.retime(this, total, cachedProfitBreakdown);
+        ScopeCache cache = scopeCache(total);
+        RecentWindow.Snapshot window = recentWindow();
+        long second = activeMillis / 1_000;
+        if (cache.profit == null || cache.profitRevision != revision) {
+            cache.profit = ProfitBreakdown.calculate(this, total);
+            cache.profitRevision = revision;
+        } else if (cache.profitSecond != second || windowChanged(cache.profitWindow, window)) {
+            cache.profit = ProfitBreakdown.retime(this, total, cache.profit);
         }
-        cachedProfitActiveMillis = activeMillis;
-        return cachedProfitBreakdown;
+        cache.profitSecond = second;
+        cache.profitWindow = window;
+        return cache.profit;
+    }
+
+    /** Financial or kill expiry is exact even between the display's one-second rate updates. */
+    private static boolean windowChanged(
+            RecentWindow.Snapshot saved, RecentWindow.Snapshot current) {
+        return saved == null
+                || saved.kills() != current.kills()
+                || saved.net() != current.net()
+                || saved.ordinaryNet() != current.ordinaryNet()
+                || (saved.millis() >= Analytics.WARMUP_MILLIS)
+                        != (current.millis() >= Analytics.WARMUP_MILLIS);
+    }
+
+    public SummonStats.Snapshot summonStats(boolean total) {
+        ScopeCache cache = scopeCache(total);
+        if (cache.summons == null || cache.summonRevision != revision) {
+            cache.summons = SummonStats.calculate(this, total);
+            cache.summonRevision = revision;
+        }
+        return cache.summons;
     }
 
     public void validate() {
@@ -630,6 +702,9 @@ public final class Ledger {
         validateJournal(fightIds);
         if (achievements == null) achievements = new AchievementState();
         achievements.validate();
+        if (sessionGoalAcknowledgement != null && !sessionGoalAcknowledgement.valid(sessionId)) {
+            sessionGoalAcknowledgement = null;
+        }
         if (sessionRecaps == null) sessionRecaps = new ArrayList<>();
         if (sessionRecaps.size() > 20) {
             throw new IllegalArgumentException("Too many saved session recaps");
@@ -658,7 +733,8 @@ public final class Ledger {
                 || sessionMillis < 0
                 || sessionMillis > activeMillis
                 || sessionStart < 0
-                || sessionStart > entries.size()) {
+                || sessionStart > entries.size()
+                || sanctuaryVisitedAt < 0) {
             throw new IllegalArgumentException("Invalid ledger schema");
         }
     }
@@ -762,14 +838,10 @@ public final class Ledger {
     }
 
     private void clearDerivedCaches() {
-        cachedStats = null;
-        cachedStatsRevision = -1;
-        cachedSpending = null;
-        cachedAnalytics = null;
-        cachedAnalyticsRevision = -1;
-        cachedAnalyticsActiveMillis = -1;
-        cachedProfitBreakdown = null;
-        cachedProfitRevision = -1;
-        cachedProfitActiveMillis = -1;
+        sessionCache = new ScopeCache();
+        totalCache = new ScopeCache();
+        recentWindow = null;
+        recentWindowRevision = recentWindowActiveMillis = -1;
+        recentWindowSnapshot = null;
     }
 }

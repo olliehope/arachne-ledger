@@ -1,6 +1,6 @@
 # Tracking diagnostics
 
-Run `/arachne diagnostics` or open **Journal → Tracking diagnostics** from the dashboard when a summon, drop, or location is missed. This page shows the current tracking state and the recent observations that explain a decision. `/arachne debug` also saves a detection report for command-based troubleshooting.
+Run `/arachne diagnostics` or open **Progress → Tracking diagnostics** from the dashboard when a summon, drop, or location is missed. This page shows the current tracking state and the recent observations that explain a decision. `/arachne debug` also saves a detection report for command-based troubleshooting.
 
 The header shows the active/AFK timer state, location, fight outcome, reported damage and threshold, and whether pickup or floating-name-tag reward windows are open. The event list covers location, summons, spawns, deaths, damage, loot, Scavenger coins, storage, and sessions. Accepted events are green; ignored events include the reason they were skipped.
 

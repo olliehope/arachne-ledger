@@ -112,7 +112,7 @@ abstract class SettingsListScreen extends Screen {
                         panelY + panelHeight - 24,
                         panelWidth - 32,
                         20,
-                        "Done",
+                        "Back",
                         false,
                         this::onClose));
     }

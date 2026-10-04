@@ -50,8 +50,8 @@ public final class RngStatsScreen extends Screen {
         panelHeight = Math.min(310, height - 20);
         panelX = (width - panelWidth) / 2;
         panelY = (height - panelHeight) / 2;
-        button(panelX + panelWidth - 120, panelY + 8, 43, "Total", total, () -> scope(true));
-        button(panelX + panelWidth - 74, panelY + 8, 62, "Session", !total, () -> scope(false));
+        button(panelX + panelWidth - 120, panelY + 8, 62, "Session", !total, () -> scope(false));
+        button(panelX + panelWidth - 54, panelY + 8, 42, "Total", total, () -> scope(true));
         int tabWidth = (panelWidth - 30) / 2;
         String[] labels = {"Any pet", "Epic pet", "Legendary pet", "Arachne's Fang"};
         for (int index = 0; index < Reward.values().length; index++) {
@@ -84,7 +84,7 @@ public final class RngStatsScreen extends Screen {
     }
 
     private void scope(boolean selected) {
-        total = selected;
+        if (ScopeSelection.select(tracker, selected)) total = selected;
         scrollOffset = 0;
         rebuildWidgets();
     }

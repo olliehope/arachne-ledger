@@ -90,39 +90,22 @@ public final class ProfitBreakdown {
 
     /**
      * Reuses receipt totals when only active time changes. The caller refreshes them with {@link
-     * #calculate} after journal or scope changes. Scanning backward stops at the recent window, so
-     * a long lifetime history does not become a per-tick HUD cost.
+     * #calculate} after journal or scope changes. Shared prefix sums make window queries
+     * logarithmic rather than scanning thousands of recent reward receipts on every active tick.
      */
     public static Snapshot retime(Ledger ledger, boolean total, Snapshot financials) {
         long sessionElapsed = Math.max(0, ledger.activeMillis - ledger.sessionMillis);
-        long windowMillis = Math.min(Analytics.WINDOW_MILLIS, sessionElapsed);
-        long windowStart = ledger.activeMillis - windowMillis;
-        boolean fromSessionStart = sessionElapsed <= Analytics.WINDOW_MILLIS;
-        double windowNet = 0, windowRng = 0;
-        long windowKills = 0;
-        for (int i = ledger.entries.size() - 1; i >= ledger.sessionStart; i--) {
-            Ledger.Entry entry = ledger.entries.get(i);
-            if (entry.elapsed() < windowStart
-                    || (!fromSessionStart && entry.elapsed() == windowStart)) {
-                break;
-            }
-            windowNet += entry.income() - entry.cost();
-            if (entry.kind() == Ledger.Kind.LOOT && isRngItem(entry.item())) {
-                windowRng += entry.income();
-            }
-            if (entry.kind() == Ledger.Kind.KILL) {
-                windowKills += entry.count();
-            }
-        }
+        RecentWindow.Snapshot window = ledger.recentWindow();
+        long windowMillis = window.millis();
         return new Snapshot(
                 financials.revenue(),
                 financials.rngRevenue(),
                 financials.costs(),
                 total ? ledger.activeMillis : sessionElapsed,
-                windowMillis >= Analytics.WARMUP_MILLIS && windowKills > 0,
+                windowMillis >= Analytics.WARMUP_MILLIS && window.kills() > 0,
                 windowMillis,
-                windowNet,
-                windowNet - windowRng);
+                window.net(),
+                window.ordinaryNet());
     }
 
     private ProfitBreakdown() {}

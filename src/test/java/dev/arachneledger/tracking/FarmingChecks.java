@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 
 import dev.arachneledger.config.Config;
 import dev.arachneledger.config.FarmingPreferences;
+import dev.arachneledger.ledger.FightRecord;
 import dev.arachneledger.ledger.Ledger;
 import dev.arachneledger.ledger.RngSince.Reward;
 import dev.arachneledger.skyblock.Messages;
@@ -44,6 +45,7 @@ public final class FarmingChecks {
         localEventQueues();
         trackerNoticesAndDedup();
         rngCache();
+        staleFightRecoveryAndMetadata();
         System.out.println("PASS: " + checks + " farming cues, ritual estimates and cache checks.");
     }
 
@@ -156,6 +158,15 @@ public final class FarmingChecks {
                 timer.begin(Messages.Summon.CRYSTAL, BASE, preferences),
                 "Crystal starts its configured fallback");
         eq(40, timer.view(BASE).seconds(), "Default Crystal estimate is forty seconds");
+        var firstLabel = timer.view(BASE);
+        var nextFrame = timer.view(BASE + 10);
+        yes(
+                firstLabel.label() == nextFrame.label(),
+                "Repeated render requests within the displayed tenth reuse formatted text");
+        eq(39.99, nextFrame.seconds(), "Label reuse preserves exact countdown data");
+        yes(
+                !firstLabel.label().equals(timer.view(BASE + 100).label()),
+                "Visible tenths advance instead of freezing the countdown");
         yes(
                 !timer.begin(Messages.Summon.CRYSTAL, BASE + 1_000, preferences),
                 "Duplicate placement cannot restart countdown");
@@ -195,10 +206,10 @@ public final class FarmingChecks {
         eq(
                 36.941,
                 timer.view(BASE + 3_059).seconds(),
-                "First burst is not classified before its sixty-millisecond window closes");
+                "First burst remains open while delayed packets can still arrive");
         eq(
-                20.94,
-                timer.view(BASE + 3_060).seconds(),
+                20.65,
+                timer.view(BASE + 3_350).seconds(),
                 "Twenty events select twenty-one seconds after the first burst");
         eq(
                 0,
@@ -214,8 +225,8 @@ public final class FarmingChecks {
         timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
         for (int index = 0; index < 21; index++) timer.particles(BASE + 3_000 + index);
         eq(
-                36.94,
-                timer.view(BASE + 3_060).seconds(),
+                36.65,
+                timer.view(BASE + 3_350).seconds(),
                 "Twenty-one events select thirty-seven seconds after the first burst");
         eq(
                 0,
@@ -225,22 +236,52 @@ public final class FarmingChecks {
         timer.clear();
         timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
         for (int index = 0; index < 20; index++) timer.particles(BASE + 3_000 + index);
-        timer.particles(BASE + 3_060);
+        timer.particles(BASE + 3_350);
         eq(
-                20.94,
-                timer.view(BASE + 3_060).seconds(),
+                20.65,
+                timer.view(BASE + 3_350).seconds(),
                 "Event at the burst boundary is excluded from the completed first sample");
         timer.clear();
         timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
-        timer.particles(BASE + 6_500);
+        for (int index = 0; index < 20; index++) timer.particles(BASE + 6_500 + index);
         eq(
-                20.94,
-                timer.view(BASE + 6_560).seconds(),
+                20.65,
+                timer.view(BASE + 6_850).seconds(),
                 "Delayed first burst uses its own event timestamp");
         eq(
                 3.5,
                 timer.view(BASE + 24_000).seconds(),
                 "Delayed burst does not pretend placement was observed three seconds earlier");
+
+        timer.clear();
+        timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
+        for (int index = 0; index < 21; index++) timer.particles(BASE + 3_000 + index * 8);
+        eq(
+                36.65,
+                timer.view(BASE + 3_350).seconds(),
+                "Dense packets stretched beyond sixty milliseconds still identify a normal ritual");
+        timer.clear();
+        timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
+        timer.particles(BASE + 3_000);
+        eq(
+                36.65,
+                timer.view(BASE + 3_350).seconds(),
+                "A single stray packet cannot shorten the configurable fallback");
+        timer.clear();
+        timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
+        for (int index = 0; index < 8; index++) timer.particles(BASE + 3_000 + index * 10);
+        timer.particles(BASE + 3_300);
+        eq(
+                36.65,
+                timer.view(BASE + 3_350).seconds(),
+                "Fragmented weak evidence retains fallback rather than guessing a quick spawn");
+        timer.clear();
+        timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
+        for (int index = 0; index < 20; index++) timer.particles(BASE + 8_000 + index);
+        eq(
+                31,
+                timer.view(BASE + 9_000).seconds(),
+                "Late unrelated dust cannot start a new sample beyond its bounded window");
 
         preferences.crystalSpawnSeconds = 55;
         timer.clear();
@@ -362,8 +403,8 @@ public final class FarmingChecks {
         for (int index = 0; index < 20; index++)
             adaptive.observeRitualParticles(BASE + 4_000 + index);
         eq(
-                20.94,
-                adaptive.pedestalTimer(BASE + 4_060).seconds(),
+                20.65,
+                adaptive.pedestalTimer(BASE + 4_350).seconds(),
                 "Tracker forwards dust event timestamps to the adaptive timer");
     }
 
@@ -541,6 +582,144 @@ public final class FarmingChecks {
                 0,
                 tracker.rngSince(true).qualifiedKills(),
                 "Ledger identity change invalidates historical cached join");
+    }
+
+    private static void staleFightRecoveryAndMetadata() throws Exception {
+        Tracker tracker = tracker();
+        yes(tracker.ledger.sanctuaryVisitedAt == BASE, "Recognized Sanctuary visit is saved once");
+        tracker.updateLocation(true, true, true, "Arachne's Sanctuary", "sidebar", BASE + 1);
+        eq(BASE, tracker.ledger.sanctuaryVisitedAt, "Repeat location reads preserve first visit");
+        message(tracker, CRYSTAL, 1_000);
+        message(tracker, INTRO, 41_000);
+        yes(
+                tracker.ledger.fights.getFirst().summonTier == FightRecord.SummonTier.CRYSTAL,
+                "Another player's completed ritual attributes Crystal tier without cost");
+        message(tracker, CRYSTAL, 41_100);
+        eq(1, tracker.ledger.fights.size(), "Fresh-spawn relay cannot interrupt the new fight");
+        long revision = tracker.ledger.revision();
+        message(tracker, CALLING, 50_000);
+        yes(
+                tracker.ledger.fights.getFirst().outcome == FightRecord.Outcome.INTERRUPTED,
+                "A completed new ritual closes a fight whose death message was missed");
+        yes(tracker.ledger.revision() > revision, "Stale recovery invalidates metadata snapshots");
+        yes(
+                tracker.ritualTimer(BASE + 50_000) != null,
+                "Recovered ritual shows countdown immediately");
+        eq(0, tracker.ledger.stats(true).kills(), "Recovered stale fight never becomes a kill");
+        message(tracker, CALLING, 50_500);
+        eq(
+                18.5,
+                tracker.ritualTimer(BASE + 50_500).seconds(),
+                "Repeated recovery cue keeps origin");
+        tracker.config.farming.pedestalTimer = false;
+        yes(tracker.pedestalTimer(BASE + 50_500) == null, "World timer can be disabled separately");
+        yes(
+                tracker.ritualTimer(BASE + 50_500) != null,
+                "HUD ritual remains available independently");
+        message(tracker, "[BOSS] Arachne: A befitting welcome!", 69_000);
+        yes(tracker.ritualTimer(BASE + 69_000) == null, "Server spawn clears HUD estimate too");
+        yes(
+                tracker.ledger.fights.getLast().summonTier == FightRecord.SummonTier.CALLING,
+                "Recovered next fight receives the new observed tier");
+        message(tracker, "ARACHNE DOWN!", 70_000);
+        revision = tracker.ledger.revision();
+        message(tracker, "Your Damage: 9,999 (Position #2)", 70_010);
+        yes(
+                tracker.ledger.revision() > revision,
+                "Rejected damage still invalidates fight snapshots");
+        yes(
+                tracker.ledger.fights.getLast().outcome == FightRecord.Outcome.LOW_DAMAGE,
+                "Low damage remains excluded after stale recovery");
+        eq(0, tracker.ledger.stats(true).kills(), "Below ten thousand damage still is not counted");
+
+        Tracker recovered = tracker();
+        message(recovered, CRYSTAL, 1_000);
+        message(recovered, "[BOSS] Arachne: My brood will feast on you!", 4_000);
+        eq(
+                1,
+                recovered.ledger.fights.size(),
+                "Generic boss activity recovers an unconfirmed fight");
+        eq(
+                0,
+                recovered.ledger.fights.getFirst().spawned,
+                "Recovered activity never invents spawn time");
+        message(recovered, CALLING, 10_000);
+        yes(
+                recovered.ritualTimer(BASE + 10_000).detail().equals("Calling ritual"),
+                "A new ritual replaces the leftover estimate of a recovered unconfirmed fight");
+
+        Tracker lateRewards = tracker();
+        message(lateRewards, INTRO, 1_000);
+        down(lateRewards, 2_000);
+        long previousFight = lateRewards.ledger.fights.getFirst().id;
+        message(lateRewards, CRYSTAL, 2_100);
+        lateRewards.observeLootStand(new UUID(140, 1), "Legendary Tarantula Pet", BASE + 2_200);
+        eq(
+                1,
+                lateRewards.ledger.stats(true).loot().getOrDefault("TARANTULA_LEGENDARY", 0L),
+                "Immediately starting the next ritual cannot hide previous death's delayed loot");
+        yes(
+                lateRewards.ledger.entries.getLast().fightId() == previousFight,
+                "Previous death's delayed loot retains its actual fight across a new ritual");
+
+        down(lateRewards, 2_300);
+        eq(
+                1,
+                lateRewards.ledger.stats(true).kills(),
+                "Old relayed results after the next ritual cannot immediately count again");
+        down(lateRewards, 45_000);
+        eq(
+                2,
+                lateRewards.ledger.stats(true).kills(),
+                "Actual new death and qualified damage recover a missed welcome after fresh ritual");
+        FightRecord missedWelcome = lateRewards.ledger.fights.getLast();
+        eq(0, missedWelcome.spawned, "Death recovery does not invent a confirmed spawn timestamp");
+        yes(
+                missedWelcome.summonTier == FightRecord.SummonTier.CRYSTAL,
+                "Death recovered from ritual retains its observed Crystal tier");
+        yes(
+                !lateRewards
+                        .ledger
+                        .summonStats(true)
+                        .row(FightRecord.SummonTier.CRYSTAL)
+                        .hasTiming(),
+                "Recovered unknown spawn duration cannot create a tier hourly rate");
+        down(lateRewards, 47_500);
+        eq(
+                2,
+                lateRewards.ledger.stats(true).kills(),
+                "Recovered death consumes ritual evidence and later relays stay ignored");
+
+        Tracker missing = tracker();
+        message(missing, INTRO, 1_000);
+        message(missing, "ARACHNE DOWN!", 2_000);
+        revision = missing.ledger.revision();
+        missing.tick(BASE + 7_001, true);
+        yes(missing.ledger.revision() > revision, "Missing summary timeout invalidates metadata");
+        yes(
+                missing.ledger.fights.getLast().outcome == FightRecord.Outcome.MISSING_DAMAGE,
+                "Summary timeout remains explicit and uncounted");
+        eq(0, missing.ledger.stats(true).kills(), "Missing summary cannot count a kill");
+        var sessionRng = missing.rngSince(false);
+        var totalRng = missing.rngSince(true);
+        yes(
+                sessionRng == missing.rngSince(false),
+                "Switching RNG scope retains cached session join");
+        yes(totalRng == missing.rngSince(true), "Switching RNG scope retains cached lifetime join");
+
+        Tracker manual = new Tracker(Files.createTempDirectory("arachne-visit-"));
+        manual.account("visit-test");
+        manual.config.manualTracking = true;
+        manual.updateLocation(true, true, false, "Spider's Den", "sidebar", BASE);
+        eq(
+                0,
+                manual.ledger.sanctuaryVisitedAt,
+                "Manual override alone cannot claim a Sanctuary visit");
+        manual.updateLocation(true, true, true, "Arachne's Sanctuary", "sidebar", BASE + 1);
+        eq(
+                BASE + 1,
+                manual.ledger.sanctuaryVisitedAt,
+                "Valid Sanctuary is recognized even when manual override is enabled");
     }
 
     private FarmingChecks() {}

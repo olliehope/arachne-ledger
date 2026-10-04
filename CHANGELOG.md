@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.4.0
+
+- Reduced graph work with cached history indexes, bounded drawing, and fewer spawn-marker draw calls. Cached HUD rows, dashboard history, and hourly projections across unchanged frames.
+- Fixed stale fights blocking a new ritual countdown and recovery when spawn dialogue is missed. Adaptive Crystal sampling tolerates delayed particles and retains the fallback when evidence is weak.
+- Added Real Arachne Non, a first-kill achievement, accessible milestone targets, and optional longer challenges. The 28-achievement catalog preserves existing unlocks and fills new goals silently from saved history.
+- Added a Progress hub, consistent Session/Total controls, a last-fight summary, and a copyable session recap.
+- Added T1/T2 comparisons with recorded earnings, actual costs, and clearly labeled fight-only hourly rates; older fights without a known ritual remain Unknown.
+- Added pet and fang graph markers that open their original fight, optional session targets with completion chat, and a carried Crystal/Calling supplies view.
+- Added named HUD presets, an optional countdown row, and pinnable achievement progress. HUD, graph, and other settings use Save/Cancel drafts.
+- Standardized elapsed time as HH:MM:SS, keeping hours above 24 instead of switching to days.
+
 ## 1.3.0
 
 - Added the aligned Loot ledger HUD layout, with observed rates for pets and fangs only. New settings use this layout; saved layouts and individual row choices are kept.

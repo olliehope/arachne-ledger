@@ -42,7 +42,16 @@ public final class ProgressionIntegrationChecks {
         Tracker tracker = new Tracker(path);
         tracker.account(account);
         yes(tracker.ready(), "Tracker loads a healthy account ledger");
+        boolean previouslyVisited = tracker.ledger.sanctuaryVisitedAt > 0;
         enter(tracker, BASE);
+        List<Achievements.Unlock> welcome = tracker.drainAchievements();
+        eq(
+                previouslyVisited ? 0 : 1,
+                welcome.size(),
+                "Only the first recorded Sanctuary visit delivers a welcome");
+        if (!previouslyVisited) {
+            yes(contains(welcome, "arachne_non"), "A first visit delivers the welcome milestone");
+        }
         return tracker;
     }
 
@@ -69,7 +78,7 @@ public final class ProgressionIntegrationChecks {
         Path path = data();
         Ledger old = new Ledger();
         old.add(Ledger.Kind.KILL, "ARACHNE", 100, 0, "server", BASE);
-        old.add(Ledger.Kind.CRYSTAL, "ARACHNE_CRYSTAL", 9, 10_000, "server", BASE);
+        old.add(Ledger.Kind.CRYSTAL, "ARACHNE_CRYSTAL", 24, 10_000, "server", BASE);
         old.add(Ledger.Kind.LOOT, "SOUL_STRING", 1_000, 5_000, "armor_stand", BASE);
         old.add(Ledger.Kind.LOOT, "TARANTULA_LEGENDARY", 1, 0, "pet_claim", BASE);
         old.achievements = null;
@@ -77,11 +86,11 @@ public final class ProgressionIntegrationChecks {
         Store.write(path.resolve("Player-default.json"), old);
         Tracker tracker = load(path, "Player");
         eq(
-                5,
+                11,
                 tracker.ledger.achievements.earnedAt.size(),
                 "Old history backfills factual lifetime tiers");
         eq(
-                5,
+                11,
                 tracker.ledger.achievements.notified.size(),
                 "Backfilled achievements are acknowledged");
         eq(
@@ -101,7 +110,9 @@ public final class ProgressionIntegrationChecks {
                 1,
                 notices.size(),
                 "First live placement beyond imported progress unlocks one milestone");
-        yes(contains(notices, "crystals_10"), "Own Crystal placement unlocks Summoner I");
+        yes(
+                contains(notices, "crystals_500"),
+                "The 25th own Crystal unlocks the rebalanced Summoner III");
         eq(0, tracker.drainAchievements().size(), "Achievement notice drains once");
         tracker.save();
         tracker.reprice("SOUL_STRING", 5_500);
@@ -114,7 +125,7 @@ public final class ProgressionIntegrationChecks {
                 "World reset preserves earned state without replay");
         Tracker restored = load(path, "Player");
         eq(
-                6,
+                12,
                 restored.ledger.achievements.earnedAt.size(),
                 "Earned progress survives account reload");
         eq(
@@ -122,7 +133,7 @@ public final class ProgressionIntegrationChecks {
                 restored.drainAchievements().size(),
                 "Reloaded acknowledgments prevent duplicate notices");
         yes(
-                restored.ledger.achievements.notified.contains("crystals_10"),
+                restored.ledger.achievements.notified.contains("crystals_500"),
                 "Live delivery acknowledgment was saved with its account ledger");
     }
 
@@ -149,7 +160,7 @@ public final class ProgressionIntegrationChecks {
         var originalState = tracker.ledger.achievements;
         tracker.newSession();
         eq(
-                1,
+                3,
                 tracker.ledger.achievements.earnedAt.size(),
                 "New session retains lifetime achievement progress");
         yes(
@@ -178,7 +189,7 @@ public final class ProgressionIntegrationChecks {
                 tracker.drainAchievements().size(),
                 "Undrained profile notices cannot leak into another profile");
         eq(
-                1,
+                3,
                 tracker.ledger.achievements.earnedAt.size(),
                 "Returning profile loads original unlocks");
         eq(2, tracker.ledger.sessionId, "Returning profile retains its own session boundary");
@@ -196,13 +207,13 @@ public final class ProgressionIntegrationChecks {
                 tracker.drainAchievements().size(),
                 "Undrained account notices cannot leak across accounts");
         eq(
-                1,
+                3,
                 tracker.ledger.achievements.earnedAt.size(),
                 "Original account progression survives switching away");
         eq(1, tracker.ledger.sessionRecaps.size(), "Original account retains its captured recap");
         Tracker restored = load(path, "B");
         eq(
-                1,
+                3,
                 restored.ledger.achievements.earnedAt.size(),
                 "Second account progress persists independently");
         eq(0, restored.drainAchievements().size(), "Second account reload remains silent");
@@ -230,9 +241,9 @@ public final class ProgressionIntegrationChecks {
                 tracker.ledger.stats(false).kills(),
                 "Automatic damage summary records a qualified kill");
         eq(
-                3,
+                5,
                 tracker.drainAchievements().size(),
-                "Confirmed short kill unlocks its speed tiers once");
+                "First Crystal and qualifying kill unlock their milestones and speed tiers once");
         tracker.newSession();
         List<SessionSummary.Snapshot> notices = tracker.drainSessionRecaps();
         eq(1, notices.size(), "Finishing an active session queues one recap");
@@ -249,9 +260,9 @@ public final class ProgressionIntegrationChecks {
         close(122_317, recap.profit().net(), "Recap preserves captured reward value minus costs");
         eq(0, tracker.ledger.stats(false).kills(), "New session starts with fresh selected totals");
         eq(
-                3,
+                6,
                 tracker.ledger.achievements.earnedAt.size(),
-                "New session retains earned speed achievements");
+                "New session retains welcome, summon, first-kill and speed achievements");
         tracker.record(Ledger.Kind.INCOME, "MANUAL", 1, 500, "manual", BASE + 5_000);
         tracker.save();
         close(
@@ -321,13 +332,14 @@ public final class ProgressionIntegrationChecks {
 
         Path path = data();
         Tracker blocked = load(path, "Player");
-        for (int index = 1; index <= 9; index++) crystal(blocked, BASE + index * 3_000);
+        for (int index = 1; index <= 24; index++) crystal(blocked, BASE + index * 3_000);
+        blocked.drainAchievements();
         Path ledgerPath = path.resolve("Player-default.json");
         Files.delete(ledgerPath);
         Files.createDirectory(ledgerPath);
         Path sentinel = ledgerPath.resolve("keep.txt");
         Files.writeString(sentinel, "original fixture");
-        crystal(blocked, BASE + 30_000);
+        crystal(blocked, BASE + 75_000);
         yes(!blocked.ready(), "Failed achievement persistence blocks tracking");
         yes(!blocked.error.isEmpty(), "Failed achievement persistence reports an error");
         eq(0, blocked.drainAchievements().size(), "Unsaved unlock notices never reach the user");

@@ -13,6 +13,7 @@ import dev.arachneledger.ui.Hud;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
 import java.time.Instant;
@@ -45,6 +46,9 @@ public final class AchievementsScreen extends Screen {
     private Ledger cachedLedger;
     private long ledgerRevision = -1, stateRevision = -1;
     private FlatButton previousButton, nextButton;
+    private List<Achievements.Progress> filteredRows;
+    private Filter cachedFilter;
+    private Category cachedCategory;
 
     public AchievementsScreen(Screen parent) {
         super(Component.literal("Arachne achievements"));
@@ -135,19 +139,28 @@ public final class AchievementsScreen extends Screen {
             cachedLedger = tracker.ledger;
             ledgerRevision = tracker.ledger.revision();
             stateRevision = tracker.ledger.achievements.revision();
+            filteredRows = null;
         }
     }
 
     private List<Achievements.Progress> rows() {
-        return snapshot.progress().stream()
-                .filter(
-                        progress ->
-                                category == null || progress.definition().category() == category)
-                .filter(
-                        progress ->
-                                filter == Filter.ALL
-                                        || progress.earned() == (filter == Filter.EARNED))
-                .toList();
+        if (filteredRows == null || cachedFilter != filter || cachedCategory != category) {
+            filteredRows =
+                    snapshot.progress().stream()
+                            .filter(
+                                    progress ->
+                                            category == null
+                                                    || progress.definition().category() == category)
+                            .filter(
+                                    progress ->
+                                            filter == Filter.ALL
+                                                    || progress.earned()
+                                                            == (filter == Filter.EARNED))
+                            .toList();
+            cachedFilter = filter;
+            cachedCategory = category;
+        }
+        return filteredRows;
     }
 
     private void updateScrollButtons(int size) {
@@ -196,7 +209,14 @@ public final class AchievementsScreen extends Screen {
                 panelY + 29,
                 Graph.MUTED,
                 false);
-        graphics.text(font, "Lifetime progress", panelX + 12, panelY + 29, Graph.MUTED, false);
+        graphics.text(
+                font,
+                font.plainSubstrByWidth(
+                        "Lifetime · click to pin", panelWidth - 32 - font.width(count)),
+                panelX + 12,
+                panelY + 29,
+                Graph.MUTED,
+                false);
         int top = panelY + 70;
         graphics.enableScissor(
                 panelX + 10, top, panelX + panelWidth - 10, top + visibleRows * ROW_HEIGHT);
@@ -250,6 +270,9 @@ public final class AchievementsScreen extends Screen {
             int mouseY) {
         boolean revealed = progress.revealed();
         String name = revealed ? progress.definition().title() : "Hidden achievement";
+        if (progress.definition().id().equals(tracker.config.hudPreferences.pinnedAchievement)) {
+            name = "* " + name;
+        }
         String description =
                 revealed
                         ? progress.definition().description()
@@ -287,6 +310,7 @@ public final class AchievementsScreen extends Screen {
             String tooltip = name + "\n" + description;
             if (revealed) {
                 tooltip += "\n" + progressText(progress);
+                tooltip += "\nClick to pin or unpin this goal on the HUD.";
             }
             if (progress.earned()) {
                 tooltip +=
@@ -319,6 +343,31 @@ public final class AchievementsScreen extends Screen {
         }
         return String.format(
                 Locale.ROOT, "%,d / %,d", progress.value(), progress.definition().target());
+    }
+
+    @Override
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        int top = panelY + 70;
+        if (event.button() == 0
+                && event.x() >= panelX + 12
+                && event.x() < panelX + panelWidth - 14
+                && event.y() >= top
+                && event.y() < top + visibleRows * ROW_HEIGHT) {
+            refreshSnapshot();
+            List<Achievements.Progress> rows = rows();
+            int index = scrollOffset + (int) ((event.y() - top) / ROW_HEIGHT);
+            if (index < rows.size() && rows.get(index).revealed() && tracker.error.isEmpty()) {
+                String previous = tracker.config.hudPreferences.pinnedAchievement;
+                String selected = rows.get(index).definition().id();
+                tracker.config.hudPreferences.pinnedAchievement =
+                        selected.equals(previous) ? "" : selected;
+                tracker.saveConfig();
+                if (!tracker.error.isEmpty())
+                    tracker.config.hudPreferences.pinnedAchievement = previous;
+                return true;
+            }
+        }
+        return super.mouseClicked(event, doubleClick);
     }
 
     @Override

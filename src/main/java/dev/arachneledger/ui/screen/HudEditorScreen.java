@@ -2,6 +2,8 @@ package dev.arachneledger.ui.screen;
 
 import dev.arachneledger.client.ArachneLedger;
 import dev.arachneledger.config.Config;
+import dev.arachneledger.config.HudPreferences;
+import dev.arachneledger.config.HudPreset;
 import dev.arachneledger.tracking.Tracker;
 import dev.arachneledger.ui.FlatButton;
 import dev.arachneledger.ui.Graph;
@@ -17,14 +19,23 @@ import net.minecraft.network.chat.Component;
 public final class HudEditorScreen extends Screen {
     private final Screen parent;
     private final Tracker tracker = ArachneLedger.tracker;
+    private final Config draft = new Config();
+    private final Config target;
     private boolean dragging;
     private double dragOffsetX, dragOffsetY;
     private int toolbarX, toolbarY, toolbarWidth;
     private FlatButton hudOptions, graphOptions;
 
     public HudEditorScreen(Screen parent) {
+        this(parent, ArachneLedger.tracker.config);
+    }
+
+    HudEditorScreen(Screen parent, Config target) {
         super(Component.literal("Edit Arachne HUD"));
         this.parent = parent;
+        this.target = target;
+        HudPreset.capture("Draft", target).apply(draft);
+        draft.hudPresets = HudPreset.normalize(target.hudPresets);
     }
 
     @Override
@@ -37,42 +48,40 @@ public final class HudEditorScreen extends Screen {
                 0,
                 0,
                 buttonWidth,
-                tracker.config.hud ? "HUD: on" : "HUD: off",
+                draft.hud ? "HUD: on" : "HUD: off",
                 "Show or hide the live overlay.",
                 () -> {
-                    tracker.config.hud = !tracker.config.hud;
+                    draft.hud = !draft.hud;
                     changed();
                 });
         button(
                 1,
                 0,
                 buttonWidth,
-                tracker.config.hudView == Config.View.GRAPH
-                        ? "Graph"
-                        : tracker.config.hudPreferences.layout.label(),
-                "Cycle Minimal, Classic, Split and Graph while preserving individual choices. The dashboard tab stays unchanged.",
+                draft.hudView == Config.View.GRAPH ? "Graph" : draft.hudPreferences.layout.label(),
+                "Cycle Minimal, Classic, Split, Loot ledger and Graph. Save applies the draft.",
                 () -> {
-                    tracker.cycleView();
+                    cycleView();
                     rebuildWidgets();
                 });
         button(
                 2,
                 0,
                 buttonWidth,
-                tracker.config.hudAlwaysShow ? "SkyBlock" : "Arena only",
+                draft.hudAlwaysShow ? "SkyBlock" : "Arena only",
                 "Show while in any SkyBlock area, or only when Arachne tracking is active.",
                 () -> {
-                    tracker.config.hudAlwaysShow = !tracker.config.hudAlwaysShow;
+                    draft.hudAlwaysShow = !draft.hudAlwaysShow;
                     changed();
                 });
         button(
                 3,
                 0,
                 buttonWidth,
-                tracker.config.hudBackground ? "Background" : "Text only",
+                draft.hudBackground ? "Background" : "Text only",
                 "Toggle a subtle black background behind the overlay.",
                 () -> {
-                    tracker.config.hudBackground = !tracker.config.hudBackground;
+                    draft.hudBackground = !draft.hudBackground;
                     changed();
                 });
         button(
@@ -96,13 +105,13 @@ public final class HudEditorScreen extends Screen {
                 "Reset",
                 "Reset HUD position and size.",
                 () -> {
-                    tracker.config.corner = 0;
-                    tracker.config.hudX = -1;
-                    tracker.config.hudY = -1;
-                    tracker.config.hudScale = 1;
+                    draft.corner = 0;
+                    draft.hudX = -1;
+                    draft.hudY = -1;
+                    draft.hudScale = 1;
                     changed();
                 });
-        button(3, 1, buttonWidth, "Done", "Save the HUD layout and return.", this::onClose);
+        button(3, 1, buttonWidth, "Save", "Save this HUD layout and return.", this::saveDraft);
         hudOptions =
                 new FlatButton(
                         toolbarX + 8,
@@ -115,19 +124,16 @@ public final class HudEditorScreen extends Screen {
         hudOptions.setTooltip(
                 Tooltip.create(Component.literal("Choose visible rows, items and text layouts.")));
         addRenderableWidget(hudOptions);
-        graphOptions = null;
-        if (tracker.config.hudView == Config.View.GRAPH) {
-            graphOptions =
-                    new FlatButton(
-                            toolbarX + toolbarWidth - 92,
-                            toolbarY - 22,
-                            84,
-                            18,
-                            "Graph options",
-                            false,
-                            () -> minecraft.setScreen(new GraphOptionsScreen(this)));
-            addRenderableWidget(graphOptions);
-        }
+        graphOptions =
+                new FlatButton(
+                        toolbarX + toolbarWidth - 92,
+                        toolbarY - 22,
+                        84,
+                        18,
+                        "Cancel",
+                        false,
+                        this::onClose);
+        addRenderableWidget(graphOptions);
     }
 
     private void button(
@@ -146,12 +152,11 @@ public final class HudEditorScreen extends Screen {
     }
 
     private void changed() {
-        tracker.saveConfig();
         rebuildWidgets();
     }
 
     private void scale(double amount) {
-        tracker.config.hudScale = Math.max(.65, Math.min(1.6, tracker.config.hudScale + amount));
+        draft.hudScale = Math.max(.65, Math.min(1.6, draft.hudScale + amount));
         changed();
     }
 
@@ -165,12 +170,9 @@ public final class HudEditorScreen extends Screen {
     public void extractRenderState(
             GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
         extractBackground(graphics, mouseX, mouseY, delta);
-        Hud.drawPanel(graphics, tracker, Hud.bounds(tracker.config, width, height), true);
+        Hud.drawPanel(graphics, tracker, draft, Hud.bounds(draft, width, height), true);
         graphics.fill(toolbarX, toolbarY, toolbarX + toolbarWidth, height - 2, 0xDF101010);
-        String hint =
-                "Drag to move · scroll to resize · "
-                        + Math.round(tracker.config.hudScale * 100)
-                        + "%";
+        String hint = "Drag to move · scroll to resize · " + Math.round(draft.hudScale * 100) + "%";
         graphics.text(
                 font,
                 font.plainSubstrByWidth(hint, toolbarWidth - 16),
@@ -196,7 +198,7 @@ public final class HudEditorScreen extends Screen {
         if (event.y() >= toolbarY && event.x() >= toolbarX && event.x() < toolbarX + toolbarWidth) {
             return super.mouseClicked(event, doubleClick);
         }
-        Hud.Bounds hudBounds = Hud.bounds(tracker.config, width, height);
+        Hud.Bounds hudBounds = Hud.bounds(draft, width, height);
         if (event.button() == 0 && hudBounds.contains(event.x(), event.y())) {
             dragging = true;
             // Keep the grabbed point under the cursor instead of snapping the HUD's corner to it.
@@ -210,12 +212,7 @@ public final class HudEditorScreen extends Screen {
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
         if (dragging) {
-            Hud.move(
-                    tracker.config,
-                    width,
-                    height,
-                    event.x() - dragOffsetX,
-                    event.y() - dragOffsetY);
+            Hud.move(draft, width, height, event.x() - dragOffsetX, event.y() - dragOffsetY);
             return true;
         }
         return super.mouseDragged(event, dx, dy);
@@ -225,7 +222,6 @@ public final class HudEditorScreen extends Screen {
     public boolean mouseReleased(MouseButtonEvent event) {
         if (dragging) {
             dragging = false;
-            tracker.saveConfig();
             return true;
         }
         return super.mouseReleased(event);
@@ -233,7 +229,7 @@ public final class HudEditorScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
-        if (Hud.bounds(tracker.config, width, height).contains(mouseX, mouseY)) {
+        if (Hud.bounds(draft, width, height).contains(mouseX, mouseY)) {
             scale(Math.signum(vertical) * .05);
             return true;
         }
@@ -247,7 +243,40 @@ public final class HudEditorScreen extends Screen {
 
     @Override
     public void onClose() {
-        tracker.saveConfig();
         minecraft.setScreen(parent);
+    }
+
+    Config draftConfig() {
+        return draft;
+    }
+
+    private void cycleView() {
+        if (draft.hudView == Config.View.GRAPH) {
+            draft.hudView = Config.View.DETAILED;
+            draft.hudPreferences.layout = HudPreferences.Layout.MINIMAL;
+        } else {
+            switch (draft.hudPreferences.layout) {
+                case MINIMAL -> draft.hudPreferences.layout = HudPreferences.Layout.CLASSIC;
+                case CLASSIC -> draft.hudPreferences.layout = HudPreferences.Layout.SPLIT;
+                case SPLIT -> draft.hudPreferences.layout = HudPreferences.Layout.LOOT;
+                case LOOT -> draft.hudView = Config.View.GRAPH;
+            }
+        }
+    }
+
+    private void saveDraft() {
+        if (!tracker.error.isEmpty()) return;
+        HudPreset previous = HudPreset.capture("Previous", target);
+        var previousPresets = target.hudPresets;
+        HudPreset.capture("Draft", draft).apply(target);
+        target.hudPresets = HudPreset.normalize(draft.hudPresets);
+        if (target == tracker.config) tracker.saveConfig();
+        if (!tracker.error.isEmpty()) {
+            previous.apply(target);
+            target.hudPresets = previousPresets;
+            rebuildWidgets();
+        } else {
+            onClose();
+        }
     }
 }

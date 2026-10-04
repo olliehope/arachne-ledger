@@ -2,12 +2,15 @@ package dev.arachneledger.ui;
 
 import dev.arachneledger.config.GraphPreferences;
 import dev.arachneledger.ledger.Ledger;
+import dev.arachneledger.skyblock.Catalog;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.network.chat.Component;
 
+import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -17,6 +20,30 @@ public final class Graph {
     public static final int GREEN = 0xFF55FF55, RED = 0xFFFF5555, MUTED = 0xFFAAAAAA;
 
     private record ValueRange(double minimum, double maximum) {}
+
+    private record RarePoint(GraphData.RareMarker marker, int x, int y) {}
+
+    private record Geometry(
+            PlotArea plot,
+            Map<GraphPreferences.Metric, List<GraphSamples.Bucket>> series,
+            Set<Integer> spawnColumns,
+            List<RarePoint> rarePoints) {}
+
+    private record CachedGeometry(
+            GraphData.Snapshot data,
+            int x,
+            int y,
+            int width,
+            int height,
+            boolean labels,
+            boolean spawns,
+            boolean rareDrops,
+            Geometry geometry) {}
+
+    // The HUD and open dashboard can use the same journal at different sizes. A tiny identity
+    // cache avoids record/list hashing (which itself walks the entire journal).
+    private static final CachedGeometry[] GEOMETRIES = new CachedGeometry[4];
+    private static int nextGeometry;
 
     /** Pixel bounds exclude the legend and labels; duration includes any future projection. */
     private record PlotArea(
@@ -104,34 +131,26 @@ public final class Graph {
                         && data.series().values().stream().allMatch(points -> points.size() <= 1)
                         && data.elapsed() == 0;
         boolean showMoneyAxis = labels && !data.series().isEmpty() && !emptyJournal;
-        int left = panelX + (showMoneyAxis ? 48 : 2);
-        int right = panelX + panelWidth - 8;
-        int top = panelY + 18;
-        int bottom = panelY + panelHeight - (labels ? 16 : 3);
-        if (right <= left || bottom <= top) {
+        Geometry geometry =
+                geometry(data, preferences, panelX, panelY, panelWidth, panelHeight, labels);
+        if (geometry == null) {
             return;
         }
 
         drawLegend(graphics, font, data, preferences, panelX + 2, panelY + 2, panelWidth - 4);
-        PlotArea plot =
-                new PlotArea(
-                        left,
-                        right,
-                        top,
-                        bottom,
-                        Math.max(1, data.duration()),
-                        calculateValueRange(data));
+        PlotArea plot = geometry.plot();
         drawGrid(graphics, font, plot, showMoneyAxis, panelX + 2);
         if (preferences.showSpawns) {
-            drawSpawnMarkers(graphics, data, plot);
+            drawSpawnMarkers(graphics, geometry);
         }
-        drawRecordedSeries(graphics, data, plot);
+        drawRecordedSeries(graphics, data, geometry);
         drawProjectedSeries(graphics, data, plot);
+        drawRareMarkers(graphics, geometry);
         drawEmptyState(graphics, font, data, preferences, plot, emptyJournal);
         if (labels) {
             drawTimeAxis(graphics, font, data, plot);
             if (plot.contains(mouseX, mouseY)) {
-                drawHoverTooltip(graphics, data, preferences, plot, mouseX, mouseY);
+                drawHoverTooltip(graphics, font, data, preferences, geometry, mouseX, mouseY);
             }
         }
     }
@@ -139,11 +158,9 @@ public final class Graph {
     private static ValueRange calculateValueRange(GraphData.Snapshot data) {
         // Keeping zero in the range makes income, costs and negative profit comparable.
         double minimum = 0, maximum = 0;
-        for (var points : data.series().values()) {
-            for (var point : points) {
-                minimum = Math.min(minimum, point.profit());
-                maximum = Math.max(maximum, point.profit());
-            }
+        for (var index : data.indexes().values()) {
+            minimum = Math.min(minimum, index.minimum());
+            maximum = Math.max(maximum, index.maximum());
         }
         for (var points : data.projections().values()) {
             for (var point : points) {
@@ -157,6 +174,139 @@ public final class Graph {
         }
         double padding = (maximum - minimum) * .1;
         return new ValueRange(minimum - padding, maximum + padding);
+    }
+
+    private static Geometry geometry(
+            GraphData.Snapshot data,
+            GraphPreferences preferences,
+            int x,
+            int y,
+            int width,
+            int height,
+            boolean labels) {
+        int replacement = -1;
+        for (int index = 0; index < GEOMETRIES.length; index++) {
+            CachedGeometry cached = GEOMETRIES[index];
+            if (cached != null
+                    && cached.x() == x
+                    && cached.y() == y
+                    && cached.width() == width
+                    && cached.height() == height
+                    && cached.labels() == labels
+                    && cached.spawns() == preferences.showSpawns
+                    && cached.rareDrops() == preferences.showRareDrops) {
+                if (cached.data() == data) return cached.geometry();
+                replacement = index;
+            }
+        }
+        boolean empty =
+                !data.series().isEmpty()
+                        && data.series().values().stream().allMatch(points -> points.size() <= 1)
+                        && data.elapsed() == 0;
+        int left = x + (labels && !data.series().isEmpty() && !empty ? 48 : 2);
+        int right = x + width - 8, top = y + 18, bottom = y + height - (labels ? 16 : 3);
+        if (right <= left || bottom <= top) return null;
+        PlotArea plot =
+                new PlotArea(
+                        left,
+                        right,
+                        top,
+                        bottom,
+                        Math.max(1, data.duration()),
+                        calculateValueRange(data));
+        Map<GraphPreferences.Metric, List<GraphSamples.Bucket>> samples =
+                new EnumMap<>(GraphPreferences.Metric.class);
+        data.indexes()
+                .forEach(
+                        (metric, index) ->
+                                samples.put(metric, index.buckets(plot.duration(), right - left)));
+        Set<Integer> spawns = new HashSet<>();
+        if (preferences.showSpawns)
+            for (var marker : data.spawns()) spawns.add(plot.xAt(marker.elapsed()));
+        Map<Integer, GraphData.RareMarker> rareColumns = new LinkedHashMap<>();
+        if (preferences.showRareDrops) {
+            for (var marker : data.rareDrops()) {
+                int rarity =
+                        "ARACHNE_FANG".equals(marker.item())
+                                ? 0
+                                : marker.item().contains("LEGENDARY") ? 2 : 1;
+                rareColumns.put(plot.xAt(marker.elapsed()) * 3 + rarity, marker);
+            }
+        }
+        List<RarePoint> rares = new ArrayList<>(rareColumns.size());
+        List<Ledger.Point> primary = data.series().get(data.primary());
+        for (var marker : rareColumns.values()) {
+            double value = primary == null ? 0 : valueAt(primary, marker.elapsed());
+            rares.add(new RarePoint(marker, plot.xAt(marker.elapsed()), plot.yAt(value)));
+        }
+        Geometry geometry =
+                new Geometry(plot, Map.copyOf(samples), Set.copyOf(spawns), List.copyOf(rares));
+        int slot = replacement >= 0 ? replacement : nextGeometry;
+        GEOMETRIES[slot] =
+                new CachedGeometry(
+                        data,
+                        x,
+                        y,
+                        width,
+                        height,
+                        labels,
+                        preferences.showSpawns,
+                        preferences.showRareDrops,
+                        geometry);
+        if (replacement < 0) nextGeometry = (nextGeometry + 1) % GEOMETRIES.length;
+        return geometry;
+    }
+
+    static int cachedViewCount() {
+        int count = 0;
+        for (CachedGeometry cached : GEOMETRIES) if (cached != null) count++;
+        return count;
+    }
+
+    /** Bounded geometry counts, useful when diagnosing a large imported ledger. */
+    public record RenderWork(int seriesColumns, int spawnColumns, int rarePoints) {}
+
+    public static RenderWork renderWork(
+            GraphData.Snapshot data,
+            GraphPreferences preferences,
+            int width,
+            int height,
+            boolean labels) {
+        Geometry geometry = geometry(data, preferences, 0, 0, width, height, labels);
+        if (geometry == null) return new RenderWork(0, 0, 0);
+        int columns = geometry.series().values().stream().mapToInt(List::size).sum();
+        return new RenderWork(
+                columns, geometry.spawnColumns().size(), geometry.rarePoints().size());
+    }
+
+    /** Hit testing uses the exact cached geometry painted in the dashboard. */
+    public static long rareFightAt(
+            GraphData.Snapshot data,
+            GraphPreferences preferences,
+            int x,
+            int y,
+            int width,
+            int height,
+            int mouseX,
+            int mouseY,
+            boolean labels) {
+        Geometry geometry = geometry(data, preferences, x, y, width, height, labels);
+        RarePoint point = geometry == null ? null : nearestRare(geometry, mouseX, mouseY);
+        return point == null ? -1 : point.marker().fightId();
+    }
+
+    private static RarePoint nearestRare(Geometry geometry, int mouseX, int mouseY) {
+        RarePoint nearest = null;
+        int distance = 26;
+        for (RarePoint point : geometry.rarePoints()) {
+            int dx = point.x() - mouseX, dy = point.y() - mouseY;
+            int squared = dx * dx + dy * dy;
+            if (squared < distance) {
+                nearest = point;
+                distance = squared;
+            }
+        }
+        return nearest;
     }
 
     private static void drawGrid(
@@ -181,14 +331,14 @@ public final class Graph {
         graphics.horizontalLine(plot.left(), plot.right(), plot.yAt(0), 0xFF666666);
     }
 
-    private static void drawSpawnMarkers(
-            GuiGraphicsExtractor graphics, GraphData.Snapshot data, PlotArea plot) {
-        Set<Integer> columns = new HashSet<>();
-        for (var marker : data.spawns()) {
-            columns.add(plot.xAt(marker.elapsed()));
-        }
+    private static void drawSpawnMarkers(GuiGraphicsExtractor graphics, Geometry geometry) {
+        PlotArea plot = geometry.plot();
         // verticalLine excludes endpoints; explicit pixel bounds keep two-pixel dashes visible.
-        for (int markerX : columns) {
+        for (int markerX : geometry.spawnColumns()) {
+            if (geometry.spawnColumns().size() > 24) {
+                graphics.verticalLine(markerX, plot.top() - 1, plot.bottom() + 1, 0x445555AA);
+                continue;
+            }
             for (int dashY = plot.top(); dashY <= plot.bottom(); dashY += 4) {
                 graphics.fill(
                         markerX,
@@ -201,26 +351,24 @@ public final class Graph {
     }
 
     private static void drawRecordedSeries(
-            GuiGraphicsExtractor graphics, GraphData.Snapshot data, PlotArea plot) {
-        for (var series : data.series().entrySet()) {
+            GuiGraphicsExtractor graphics, GraphData.Snapshot data, Geometry geometry) {
+        PlotArea plot = geometry.plot();
+        for (var series : geometry.series().entrySet()) {
             var points = series.getValue();
             int previousX = plot.left(), previousY = plot.yAt(0);
-            for (int pointIndex = 0; pointIndex < points.size(); pointIndex++) {
-                var point = points.get(pointIndex);
-                int pointX = plot.xAt(point.elapsed());
-                // Journal entries are steps. Entries sharing a pixel must retain the last value.
-                while (pointIndex + 1 < points.size()
-                        && plot.xAt(points.get(pointIndex + 1).elapsed()) == pointX) {
-                    point = points.get(++pointIndex);
-                }
-                int pointY = plot.yAt(point.profit());
-                int color = series.getKey().color(point.profit());
-                graphics.horizontalLine(previousX, pointX, previousY, color);
-                graphics.verticalLine(
-                        pointX,
-                        Math.min(previousY, pointY),
-                        Math.max(previousY, pointY) + 1,
-                        color);
+            for (var point : points) {
+                int pointX = plot.left() + point.column();
+                int pointY = plot.yAt(point.last());
+                int minimumY = Math.min(previousY, plot.yAt(point.maximum()));
+                int maximumY = Math.max(previousY, plot.yAt(point.minimum()));
+                int color = series.getKey().color(point.last());
+                // Consecutive unchanged columns form one horizontal segment. A quiet graph
+                // should not emit hundreds of identical one-pixel draw commands.
+                if (minimumY == maximumY && previousY == pointY) continue;
+                if (pointX > previousX)
+                    graphics.horizontalLine(previousX, pointX, previousY, color);
+                if (minimumY != maximumY)
+                    graphics.verticalLine(pointX, minimumY, maximumY + 1, color);
                 previousX = pointX;
                 previousY = pointY;
             }
@@ -229,6 +377,18 @@ public final class Graph {
                     plot.xAt(data.elapsed()),
                     previousY,
                     series.getKey().color(data.value(series.getKey())));
+        }
+    }
+
+    private static void drawRareMarkers(GuiGraphicsExtractor graphics, Geometry geometry) {
+        for (RarePoint point : geometry.rarePoints()) {
+            graphics.fill(point.x() - 2, point.y() - 2, point.x() + 3, point.y() + 3, 0xFF151515);
+            graphics.fill(
+                    point.x() - 1,
+                    point.y() - 1,
+                    point.x() + 2,
+                    point.y() + 2,
+                    Hud.itemColor(point.marker().item()));
         }
     }
 
@@ -278,7 +438,7 @@ public final class Graph {
 
     private static void drawTimeAxis(
             GuiGraphicsExtractor graphics, Font font, GraphData.Snapshot data, PlotArea plot) {
-        graphics.text(font, "0:00", plot.left(), plot.bottom() + 5, MUTED, false);
+        graphics.text(font, Format.time(0), plot.left(), plot.bottom() + 5, MUTED, false);
         String endTime =
                 Format.time(data.duration()) + (data.projections().isEmpty() ? "" : " projected");
         graphics.text(
@@ -287,11 +447,31 @@ public final class Graph {
 
     private static void drawHoverTooltip(
             GuiGraphicsExtractor graphics,
+            Font font,
             GraphData.Snapshot data,
             GraphPreferences preferences,
-            PlotArea plot,
+            Geometry geometry,
             int mouseX,
             int mouseY) {
+        PlotArea plot = geometry.plot();
+        RarePoint rare = nearestRare(geometry, mouseX, mouseY);
+        if (rare != null) {
+            GraphData.RareMarker marker = rare.marker();
+            String text =
+                    Catalog.name(marker.item())
+                            + " x"
+                            + marker.count()
+                            + (marker.value() > 0
+                                    ? " · " + Format.coins(marker.value()) + " coins"
+                                    : "")
+                            + "\nActive time "
+                            + Format.time(marker.elapsed())
+                            + (marker.fightId() > 0
+                                    ? "\nClick to open Fight #" + marker.fightId()
+                                    : "\nNo recorded fight association");
+            Tooltips.show(graphics, font, text, mouseX, mouseY);
+            return;
+        }
         long elapsed =
                 (long)
                         ((double) (mouseX - plot.left())
@@ -318,14 +498,15 @@ public final class Graph {
                     .append(" coins");
         }
         if (preferences.showSpawns) {
-            for (var marker : data.spawns()) {
-                if (Math.abs(plot.xAt(marker.elapsed()) - mouseX) <= 2) {
-                    tooltip.append("\nArachne spawn · Fight #").append(marker.fightId());
+            for (int column : geometry.spawnColumns()) {
+                if (Math.abs(column - mouseX) <= 2) {
+                    tooltip.append("\nArachne spawn");
+                    break;
                 }
             }
         }
         graphics.verticalLine(mouseX, plot.top(), plot.bottom(), 0xFFAAAAAA);
-        graphics.setTooltipForNextFrame(Component.literal(tooltip.toString()), mouseX, mouseY);
+        Tooltips.show(graphics, font, tooltip.toString(), mouseX, mouseY);
     }
 
     /** Step lookup uses the last entry at or before this point on the active-time axis. */
@@ -364,6 +545,10 @@ public final class Graph {
         if (preferences.showSpawns) {
             graphics.text(font, "Spawns", cursorX, legendY, 0xFF7777FF, false);
             cursorX += font.width("Spawns") + 8;
+        }
+        if (preferences.showRareDrops && !data.rareDrops().isEmpty()) {
+            graphics.text(font, "RNG", cursorX, legendY, 0xFFFFAA00, false);
+            cursorX += font.width("RNG") + 8;
         }
         if (!data.projections().isEmpty()) {
             int remainingWidth = Math.max(0, legendX + availableWidth - cursorX);

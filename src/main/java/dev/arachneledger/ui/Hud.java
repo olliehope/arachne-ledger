@@ -24,6 +24,9 @@ import java.util.Locale;
 public final class Hud {
     public static final int WIDTH = 224, WHITE = 0xFFFFFFFF, GOLD = 0xFFFFAA00, TITLE = 0xFFFFFF55;
     private static final int LOOT_WIDTH = 300;
+    private static final Component TITLE_TEXT =
+            Component.literal("Arachne Profit Tracker")
+                    .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD);
 
     public record Bounds(int x, int y, int width, int height, float scale) {
         public boolean contains(double mouseX, double mouseY) {
@@ -72,7 +75,12 @@ public final class Hud {
                             ? 6
                             : !splitColumns(preferences) && rewards > 0 && metrics > 0 ? 3 : 0;
             return Math.max(
-                    16, (config.hudPreferences.showTitle ? 15 : 0) + rows * 11 + groupGap + 8);
+                    16,
+                    (config.hudPreferences.showTitle ? 15 : 0)
+                            + rows * 11
+                            + groupGap
+                            + 8
+                            + (preferences.showCountdown ? 11 : 0));
         }
         var preferences = config.graph;
         int metricRows = 0;
@@ -87,7 +95,10 @@ public final class Hud {
                 (preferences.showActiveTime ? 1 : 0)
                         + (preferences.showScope ? 1 : 0)
                         + (preferences.showSpawnCount ? 1 : 0);
-        return 89 + (metricRows + statusRows) * 11 + (metricRows > 0 ? 3 : 0);
+        return 89
+                + (metricRows + statusRows) * 11
+                + (metricRows > 0 ? 3 : 0)
+                + (config.hudPreferences.showCountdown ? 11 : 0);
     }
 
     /** Resolve saved fractional positions against the free space in the current viewport. */
@@ -130,14 +141,25 @@ public final class Hud {
 
     public static void drawPanel(
             GuiGraphicsExtractor graphics, Tracker tracker, Bounds hudBounds, boolean editing) {
+        drawPanel(graphics, tracker, tracker.config, hudBounds, editing);
+    }
+
+    /** An editor previews a detached display draft without changing live tracking preferences. */
+    public static void drawPanel(
+            GuiGraphicsExtractor graphics,
+            Tracker tracker,
+            Config display,
+            Bounds hudBounds,
+            boolean editing) {
         var font = Minecraft.getInstance().font;
-        int unscaledHeight = panelHeight(tracker.config);
-        int unscaledWidth = panelWidth(tracker.config);
-        var preferences = tracker.config.hudPreferences;
+        int unscaledHeight = panelHeight(display);
+        int unscaledWidth = panelWidth(display);
+        var preferences = display.hudPreferences;
         if (!editing
-                && tracker.config.hudView != Config.View.GRAPH
+                && display.hudView != Config.View.GRAPH
                 && !preferences.showTitle
-                && rewardRowCount(preferences) + metricRowCount(preferences) == 0) {
+                && rewardRowCount(preferences) + metricRowCount(preferences) == 0
+                && !preferences.showCountdown) {
             return;
         }
         // Panel contents use unscaled local coordinates; only the outer transform moves/resizes
@@ -145,22 +167,27 @@ public final class Hud {
         graphics.pose().pushMatrix();
         graphics.pose().translate(hudBounds.x(), hudBounds.y());
         graphics.pose().scale(hudBounds.scale());
-        if (tracker.config.hudBackground) {
+        if (display.hudBackground) {
             graphics.fill(0, 0, unscaledWidth, unscaledHeight, 0x80000000);
         }
-        boolean showTitle = tracker.config.hudView == Config.View.GRAPH || preferences.showTitle;
+        boolean showTitle = display.hudView == Config.View.GRAPH || preferences.showTitle;
         if (showTitle) {
-            graphics.text(
-                    font,
-                    Component.literal("Arachne Profit Tracker")
-                            .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD),
-                    4,
-                    4,
-                    WHITE,
-                    true);
+            graphics.text(font, TITLE_TEXT, 4, 4, WHITE, true);
         }
         int rowY = showTitle ? 19 : 4;
-        if (tracker.config.hudView == Config.View.GRAPH) {
+        if (preferences.showCountdown) {
+            var timer = tracker.ritualTimer(System.currentTimeMillis());
+            if (timer != null) {
+                graphics.text(font, timer.label(), 4, rowY, timer.color(), true);
+            } else if (editing) {
+                graphics.text(font, "Arachne in ~40.0s", 4, rowY, TITLE, true);
+            } else {
+                graphics.text(
+                        font, "Arachne · " + tracker.timerState(), 4, rowY, Graph.MUTED, true);
+            }
+            rowY += 11;
+        }
+        if (display.hudView == Config.View.GRAPH) {
             drawGraphPanel(graphics, tracker, font, rowY);
             if (editing) {
                 graphics.outline(0, 0, WIDTH, unscaledHeight, 0x80666666);
@@ -168,7 +195,7 @@ public final class Hud {
             graphics.pose().popMatrix();
             return;
         }
-        drawContent(graphics, font, HudContent.build(tracker), preferences, rowY);
+        drawContent(graphics, font, HudContent.build(tracker, preferences), preferences, rowY);
         if (editing) {
             graphics.outline(0, 0, unscaledWidth, unscaledHeight, 0x80666666);
         }
@@ -240,7 +267,8 @@ public final class Hud {
                 + (preferences.showActiveTime ? 1 : 0)
                 + (preferences.showScope ? 1 : 0)
                 + (preferences.showStatus ? 1 : 0)
-                + (preferences.showUnpricedWarning ? 1 : 0);
+                + (preferences.showUnpricedWarning ? 1 : 0)
+                + (!preferences.pinnedAchievement.isEmpty() ? 1 : 0);
     }
 
     private static boolean splitColumns(HudPreferences preferences) {
@@ -283,12 +311,11 @@ public final class Hud {
     /** Align coin subtotals, then keep item names, counts and observed rare rates on one line. */
     private static void drawLootLedger(
             GuiGraphicsExtractor graphics, Font font, HudContent.Snapshot content, int rowY) {
-        int valueWidth =
-                content.rewards().stream()
-                        .filter(row -> row.id().startsWith("loot:"))
-                        .mapToInt(row -> font.width(row.value()))
-                        .max()
-                        .orElse(0);
+        int valueWidth = 0;
+        for (HudContent.Row row : content.rewards()) {
+            if (row.id().startsWith("loot:"))
+                valueWidth = Math.max(valueWidth, font.width(row.value()));
+        }
         int itemX = valueWidth == 0 ? 4 : 4 + valueWidth + font.width(" | ");
         boolean previousLoot = false, previousRow = false;
         for (HudContent.Row row : content.rewards()) {
@@ -481,9 +508,7 @@ public final class Hud {
     }
 
     public static String shortTime(long millis) {
-        return millis >= 60_000
-                ? (millis / 60_000) + "m " + (millis / 1000 % 60) + "s"
-                : (millis / 1000) + "s";
+        return Format.time(millis);
     }
 
     static void row(

@@ -10,6 +10,7 @@ public record AchievementDefinition(
         long target,
         boolean hidden) {
     public enum Category {
+        WELCOME("Getting started"),
         HUNTING("Hunting"),
         SUMMONING("Summoning"),
         COLLECTION("Collection"),
@@ -28,6 +29,7 @@ public record AchievementDefinition(
     }
 
     public enum Metric {
+        SANCTUARY_VISIT,
         COUNTED_KILLS,
         CRYSTAL_PLACEMENTS,
         SOUL_STRING,

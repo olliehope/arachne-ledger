@@ -3,7 +3,9 @@ package dev.arachneledger.ui;
 import dev.arachneledger.config.GraphPreferences;
 import dev.arachneledger.ledger.Analytics;
 import dev.arachneledger.ledger.FightRecord;
+import dev.arachneledger.ledger.HistoryIndex;
 import dev.arachneledger.ledger.Ledger;
+import dev.arachneledger.ledger.ProfitBreakdown;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -22,6 +24,10 @@ public final class GraphData {
     /** A known spawn, positioned on the same active-time axis as journal entries. */
     public record Marker(long fightId, long elapsed) {}
 
+    /** A detected rare reward retains its original fight link and immutable recorded sale value. */
+    public record RareMarker(
+            long fightId, long entryId, long elapsed, String item, long count, double value) {}
+
     public record Snapshot(
             Map<GraphPreferences.Metric, List<Ledger.Point>> series,
             Map<GraphPreferences.Metric, List<Ledger.Point>> projections,
@@ -36,7 +42,46 @@ public final class GraphData {
             long windowMillis,
             long windowKills,
             GraphPreferences.Metric primary,
-            long spawnCount) {
+            long spawnCount,
+            List<RareMarker> rareDrops,
+            Map<GraphPreferences.Metric, GraphSamples.Index> indexes) {
+        /**
+         * Preserve the original graph snapshot API for integrations and small compatibility views.
+         */
+        public Snapshot(
+                Map<GraphPreferences.Metric, List<Ledger.Point>> series,
+                Map<GraphPreferences.Metric, List<Ledger.Point>> projections,
+                List<Marker> spawns,
+                Map<GraphPreferences.Metric, Double> values,
+                Map<GraphPreferences.Metric, Double> hourly,
+                Map<GraphPreferences.Metric, Double> projectedHourly,
+                Map<GraphPreferences.Metric, Double> projectedTotals,
+                long elapsed,
+                long duration,
+                boolean projectionReady,
+                long windowMillis,
+                long windowKills,
+                GraphPreferences.Metric primary,
+                long spawnCount) {
+            this(
+                    series,
+                    projections,
+                    spawns,
+                    values,
+                    hourly,
+                    projectedHourly,
+                    projectedTotals,
+                    elapsed,
+                    duration,
+                    projectionReady,
+                    windowMillis,
+                    windowKills,
+                    primary,
+                    spawnCount,
+                    List.of(),
+                    indexSeries(series));
+        }
+
         public double value(GraphPreferences.Metric metric) {
             return values.getOrDefault(metric, 0.0);
         }
@@ -72,7 +117,9 @@ public final class GraphData {
             long revision,
             Map<GraphPreferences.Metric, List<Ledger.Point>> series,
             Map<GraphPreferences.Metric, Double> values,
-            List<Marker> spawns) {}
+            List<Marker> spawns,
+            List<RareMarker> rareDrops,
+            Map<GraphPreferences.Metric, GraphSamples.Index> indexes) {}
 
     private record Recent(
             long revision,
@@ -92,7 +139,7 @@ public final class GraphData {
         Cache cache = CACHE.computeIfAbsent(ledger, ignored -> new Cache());
         if (cache.snapshot != null
                 && cache.revision == revision
-                && cache.activeMillis == ledger.activeMillis
+                && cache.activeMillis / 1000 == ledger.activeMillis / 1000
                 && cache.scope == total
                 && cache.projection == prefs.showProjection
                 && Objects.equals(cache.enabled, enabled)
@@ -112,7 +159,7 @@ public final class GraphData {
         Recent recent = cache.recent;
         if (recent == null
                 || recent.revision != revision
-                || recent.activeMillis != ledger.activeMillis) {
+                || recent.activeMillis / 1000 != ledger.activeMillis / 1000) {
             recent = calculateRecent(ledger, revision);
             cache.recent = recent;
         }
@@ -121,6 +168,8 @@ public final class GraphData {
         Map<GraphPreferences.Metric, List<Ledger.Point>> selected =
                 new EnumMap<>(GraphPreferences.Metric.class);
         Map<GraphPreferences.Metric, List<Ledger.Point>> projected =
+                new EnumMap<>(GraphPreferences.Metric.class);
+        Map<GraphPreferences.Metric, GraphSamples.Index> selectedIndexes =
                 new EnumMap<>(GraphPreferences.Metric.class);
         Map<GraphPreferences.Metric, Double> hourly = zeroValues();
         Map<GraphPreferences.Metric, Double> futureTotals = zeroValues();
@@ -139,6 +188,7 @@ public final class GraphData {
         long duration = drawProjection ? elapsed + Analytics.WINDOW_MILLIS : elapsed;
         for (GraphPreferences.Metric metric : enabled) {
             selected.put(metric, actual.series.get(metric));
+            selectedIndexes.put(metric, actual.indexes.get(metric));
             if (drawProjection) {
                 double current = actual.values.get(metric);
                 double future = futureTotals.get(metric);
@@ -164,7 +214,9 @@ public final class GraphData {
                         recent.windowMillis,
                         recent.kills,
                         primary,
-                        actual.spawns.size());
+                        actual.spawns.size(),
+                        actual.rareDrops,
+                        immutable(selectedIndexes));
         cache.snapshot = snapshot;
         cache.revision = revision;
         cache.activeMillis = ledger.activeMillis;
@@ -185,10 +237,23 @@ public final class GraphData {
             series.put(metric, points);
         }
         long origin = total ? 0 : ledger.sessionMillis;
+        List<RareMarker> rareDrops = new ArrayList<>();
         for (int i = total ? 0 : ledger.sessionStart; i < ledger.entries.size(); i++) {
             Ledger.Entry entry = ledger.entries.get(i);
             accumulate(values, entry);
             long elapsed = Math.max(0, entry.elapsed() - origin);
+            if (entry.kind() == Ledger.Kind.LOOT
+                    && HistoryIndex.isDetectedReward(entry)
+                    && ProfitBreakdown.isRngItem(entry.item())) {
+                rareDrops.add(
+                        new RareMarker(
+                                entry.fightId(),
+                                entry.id(),
+                                elapsed,
+                                entry.item(),
+                                entry.count(),
+                                entry.income()));
+            }
             for (GraphPreferences.Metric metric : GraphPreferences.Metric.values()) {
                 series.get(metric).add(new Ledger.Point(elapsed, values.get(metric)));
             }
@@ -210,7 +275,13 @@ public final class GraphData {
             }
         }
         spawns.sort(Comparator.comparingLong(Marker::elapsed).thenComparingLong(Marker::fightId));
-        return new Actual(revision, immutable(series), immutable(values), List.copyOf(spawns));
+        return new Actual(
+                revision,
+                immutable(series),
+                immutable(values),
+                List.copyOf(spawns),
+                List.copyOf(rareDrops),
+                indexSeries(series));
     }
 
     private static Recent calculateRecent(Ledger ledger, long revision) {
@@ -252,6 +323,14 @@ public final class GraphData {
             values.put(metric, 0.0);
         }
         return values;
+    }
+
+    private static Map<GraphPreferences.Metric, GraphSamples.Index> indexSeries(
+            Map<GraphPreferences.Metric, List<Ledger.Point>> series) {
+        Map<GraphPreferences.Metric, GraphSamples.Index> indexes =
+                new EnumMap<>(GraphPreferences.Metric.class);
+        series.forEach((metric, points) -> indexes.put(metric, new GraphSamples.Index(points)));
+        return immutable(indexes);
     }
 
     private static <V> Map<GraphPreferences.Metric, V> immutable(

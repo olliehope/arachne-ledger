@@ -6,6 +6,7 @@ import dev.arachneledger.tracking.Tracker;
 import dev.arachneledger.ui.FlatButton;
 import dev.arachneledger.ui.Graph;
 import dev.arachneledger.ui.Hud;
+import dev.arachneledger.ui.Tooltips;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -27,6 +28,8 @@ public final class GraphOptionsScreen extends Screen {
 
     private final Screen parent;
     private final Tracker tracker = ArachneLedger.tracker;
+    private final GraphPreferences draft = tracker.config.graph.copy();
+    private String note = "Save applies changes. Cancel keeps the current graph.";
     // Switching between line and text options must not inherit the other tab's scroll position.
     private final int[] tabScrollOffsets = new int[2];
     private int selectedTab, panelX, panelY, panelWidth, panelHeight, visibleRows;
@@ -44,10 +47,22 @@ public final class GraphOptionsScreen extends Screen {
         panelX = (width - panelWidth) / 2;
         panelY = (height - panelHeight) / 2;
         rows = selectedTab == 0 ? lineRows() : textRows();
-        visibleRows = Math.max(1, Math.min(6, (panelHeight - 90) / 22));
+        visibleRows = Math.max(1, Math.min(6, (panelHeight - 112) / 22));
         tabScrollOffsets[selectedTab] =
                 Math.max(0, Math.min(tabScrollOffsets[selectedTab], rows.size() - visibleRows));
 
+        int footerWidth = (panelWidth - 36) / 2;
+        var save =
+                new FlatButton(
+                        panelX + 16,
+                        panelY + panelHeight - 24,
+                        footerWidth,
+                        20,
+                        "Save",
+                        true,
+                        this::saveDraft);
+        save.active = tracker.error.isEmpty();
+        addRenderableWidget(save);
         addRenderableWidget(
                 new FlatButton(
                         panelX + 16,
@@ -112,17 +127,17 @@ public final class GraphOptionsScreen extends Screen {
         }
         addRenderableWidget(
                 new FlatButton(
-                        panelX + 16,
+                        panelX + 20 + footerWidth,
                         panelY + panelHeight - 24,
-                        panelWidth - 32,
+                        footerWidth,
                         20,
-                        "Done",
+                        "Cancel",
                         false,
                         this::onClose));
     }
 
     private List<Row> lineRows() {
-        GraphPreferences preferences = tracker.config.graph;
+        GraphPreferences preferences = draft;
         boolean hasMetric = !preferences.enabledSeries().isEmpty();
         return List.of(
                 metricRow(
@@ -144,6 +159,11 @@ public final class GraphOptionsScreen extends Screen {
                         preferences.showSpawns,
                         "Mark known Arachne spawns, including fights skipped for low damage. Fights joined after their spawn have no marker.",
                         () -> preferences.showSpawns = !preferences.showSpawns),
+                toggle(
+                        "Rare drop markers",
+                        preferences.showRareDrops,
+                        "Mark detected Tarantula pets and Arachne Fangs. Hover for the recorded value; click a marker in the dashboard to open its fight.",
+                        () -> preferences.showRareDrops = !preferences.showRareDrops),
                 new Row(
                         "Text metric",
                         hasMetric ? preferences.effectiveMetric().label() : "None selected",
@@ -157,7 +177,7 @@ public final class GraphOptionsScreen extends Screen {
     }
 
     private Row metricRow(GraphPreferences.Metric metric, String tooltip) {
-        GraphPreferences preferences = tracker.config.graph;
+        GraphPreferences preferences = draft;
         boolean enabled = preferences.enabledSeries().contains(metric);
         return new Row(
                 metric.label(),
@@ -172,7 +192,7 @@ public final class GraphOptionsScreen extends Screen {
     }
 
     private List<Row> textRows() {
-        GraphPreferences preferences = tracker.config.graph;
+        GraphPreferences preferences = draft;
         return List.of(
                 toggle(
                         "Total value",
@@ -225,7 +245,23 @@ public final class GraphOptionsScreen extends Screen {
     }
 
     private void changed() {
+        note = "Unsaved changes.";
+        rebuildWidgets();
+    }
+
+    private void saveDraft() {
+        if (!tracker.error.isEmpty()) return;
+        GraphPreferences saved = tracker.config.graph;
+        GraphPreferences replacement = draft.copy();
+        replacement.validate();
+        tracker.config.graph = replacement;
         tracker.saveConfig();
+        if (!tracker.error.isEmpty()) {
+            tracker.config.graph = saved;
+            note = "Storage error; graph settings were not saved.";
+        } else {
+            note = "Saved graph settings.";
+        }
         rebuildWidgets();
     }
 
@@ -302,9 +338,16 @@ public final class GraphOptionsScreen extends Screen {
                     && mouseX < panelX + panelWidth - 156
                     && mouseY >= rowY - 6
                     && mouseY < rowY + 14) {
-                graphics.setTooltipForNextFrame(Component.literal(row.tooltip()), mouseX, mouseY);
+                Tooltips.show(graphics, font, row.tooltip(), mouseX, mouseY);
             }
         }
+        graphics.text(
+                font,
+                font.plainSubstrByWidth(note, panelWidth - 32),
+                panelX + 16,
+                panelY + panelHeight - 37,
+                Hud.TITLE,
+                false);
     }
 
     @Override

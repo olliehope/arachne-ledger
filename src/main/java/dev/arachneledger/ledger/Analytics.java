@@ -27,25 +27,10 @@ public final class Analytics {
             double crystals, double callings, double other, Map<String, Double> lootRevenue) {}
 
     static Snapshot calculate(Ledger ledger, Ledger.Stats selected, Spending spending) {
-        long sessionElapsed = Math.max(0, ledger.activeMillis - ledger.sessionMillis);
-        long windowMillis = Math.min(WINDOW_MILLIS, sessionElapsed);
-        long startMillis = ledger.activeMillis - windowMillis;
-        double windowNet = 0;
-        long windowKills = 0;
-        // Entries at the session origin belong to the session, even when elapsed time is still 0.
-        // Once the window rolls, its left endpoint is exclusive: (now - 5 minutes, now].
-        boolean fromSessionStart = sessionElapsed <= WINDOW_MILLIS;
-        for (int i = ledger.entries.size() - 1; i >= ledger.sessionStart; i--) {
-            Ledger.Entry entry = ledger.entries.get(i);
-            if (entry.elapsed() < startMillis
-                    || (!fromSessionStart && entry.elapsed() == startMillis)) {
-                break;
-            }
-            windowNet += entry.income() - entry.cost();
-            if (entry.kind() == Ledger.Kind.KILL) {
-                windowKills += entry.count();
-            }
-        }
+        RecentWindow.Snapshot window = ledger.recentWindow();
+        long windowMillis = window.millis();
+        double windowNet = window.net();
+        long windowKills = window.kills();
         boolean ready = windowMillis >= WARMUP_MILLIS && windowKills > 0;
         double hourly = ready ? windowNet * 3_600_000.0 / windowMillis : 0;
         long kills = selected.kills();

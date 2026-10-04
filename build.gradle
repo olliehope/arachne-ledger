@@ -54,6 +54,11 @@ processResources {
 // These deterministic main-method suites use the real runtime classpath, without a game server.
 // Keep their registration visible here so new modules have one obvious verification entry point.
 def regressionSuites = [
+    'Dashboard': 'dev.arachneledger.ui',
+    'SessionGoals': 'dev.arachneledger.ledger',
+    'SummonStats': 'dev.arachneledger.ledger',
+    'Supplies': 'dev.arachneledger.ledger',
+    'HudPreset': 'dev.arachneledger.config',
     'ClientMessage': 'dev.arachneledger.client',
     'RngSince': 'dev.arachneledger.ledger',
     'Farming': 'dev.arachneledger.tracking',

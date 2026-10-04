@@ -82,7 +82,7 @@ public final class AchievementChecks {
 
     private static void registryAndEmptyState() {
         Set<String> ids = new HashSet<>();
-        eq(23, Achievements.DEFINITIONS.size(), "Registry contains all planned milestones");
+        eq(28, Achievements.DEFINITIONS.size(), "Registry contains all planned milestones");
         for (var definition : Achievements.DEFINITIONS) {
             yes(ids.add(definition.id()), "Every definition has a stable unique ID");
             yes(definition.target() > 0, "Every milestone has a positive target");
@@ -95,7 +95,7 @@ public final class AchievementChecks {
         AchievementState state = fresh(empty);
         var snapshot = Achievements.snapshot(empty, state);
         eq(0, snapshot.earned(), "Empty ledger has no earned milestones");
-        eq(23, snapshot.total(), "Total includes hidden achievements");
+        eq(28, snapshot.total(), "Total includes hidden achievements");
         yes(
                 !progress(empty, state, "pet_legendary").revealed(),
                 "Hidden milestone starts concealed");
@@ -166,10 +166,10 @@ public final class AchievementChecks {
         eq(1, facts.fangs(), "Unpriced automatic fang still counts");
         eq(45_000, facts.fastestKill(), "Legacy or unknown spawn never invents a faster time");
         var update = Achievements.evaluate(ledger, state, BASE + 2, true);
-        eq(7, update.unlocks().size(), "One live evaluation unlocks earned tiers once");
+        eq(11, update.unlocks().size(), "One live evaluation unlocks earned tiers once");
         yes(state.earnedAt.containsKey("speed_60"), "First speed tier reached");
         yes(state.earnedAt.containsKey("speed_45"), "Exact speed threshold reached");
-        yes(!state.earnedAt.containsKey("speed_30"), "Unreached speed tier stays locked");
+        yes(state.earnedAt.containsKey("speed_30"), "The approachable 45-second tier is reached");
         yes(
                 !progress(ledger, state, "pet_legendary").revealed(),
                 "Epic pet does not reveal legendary secret");
@@ -221,8 +221,8 @@ public final class AchievementChecks {
         AchievementState imported = new AchievementState();
         var update = Achievements.evaluate(ledger, imported, BASE, true);
         eq(0, update.unlocks().size(), "Existing history backfills silently");
-        eq(14, imported.earnedAt.size(), "Backfill applies all factual non-speed tiers");
-        eq(14, imported.notified.size(), "Backfill acknowledges all imported unlocks");
+        eq(18, imported.earnedAt.size(), "Backfill applies all factual non-speed tiers");
+        eq(18, imported.notified.size(), "Backfill acknowledges all imported unlocks");
         yes(
                 imported.earnedAt.values().stream().allMatch(value -> value == 0),
                 "Backfill does not invent historical unlock dates");
@@ -235,8 +235,8 @@ public final class AchievementChecks {
                         AchievementState.class,
                         AchievementState::new,
                         AchievementState::validate);
-        eq(14, loaded.earnedAt.size(), "Unlock IDs survive JSON round trip");
-        eq(14, loaded.notified.size(), "Notification acknowledgments survive JSON round trip");
+        eq(18, loaded.earnedAt.size(), "Unlock IDs survive JSON round trip");
+        eq(18, loaded.notified.size(), "Notification acknowledgments survive JSON round trip");
         eq(
                 0,
                 Achievements.evaluate(ledger, loaded, BASE + 1, true).unlocks().size(),
@@ -245,7 +245,7 @@ public final class AchievementChecks {
         var speed = Achievements.evaluate(ledger, loaded, BASE + 2, false);
         eq(0, speed.unlocks().size(), "Disabled notifications stay silent for new unlocks");
         yes(speed.changed(), "Silent live unlocks still require persistence");
-        eq(17, loaded.notified.size(), "Disabled notification unlocks are acknowledged");
+        eq(21, loaded.notified.size(), "Disabled notification unlocks are acknowledged");
         eq(BASE + 2, loaded.earnedAt.get("speed_30"), "Live unlock records its observed date");
         eq(
                 0,
@@ -332,7 +332,9 @@ public final class AchievementChecks {
                 "The first pet dry milestone unlocks live");
         yes(state.earnedAt.containsKey("fang_dry_50"), "The first fang dry milestone unlocks");
         yes(state.earnedAt.containsKey("fang_dry_100"), "Exact dry threshold unlocks its tier");
-        yes(!state.earnedAt.containsKey("fang_dry_250"), "A later dry tier remains locked");
+        yes(
+                state.earnedAt.containsKey("fang_dry_250"),
+                "All accessible Fang dry tiers are reached");
 
         FightRecord reward = fight(ledger, 90_000, 10_000, FightRecord.Outcome.COUNTED, "server");
         add(ledger, Ledger.Kind.LOOT, "TARANTULA_EPIC", 1, 0, "pet_claim", reward.id);
@@ -358,7 +360,7 @@ public final class AchievementChecks {
                 "The longest later run becomes progression");
         Achievements.evaluate(ledger, state, BASE + 2, true);
         yes(state.earnedAt.containsKey("fang_dry_250"), "The highest fang dry tier unlocks");
-        yes(!state.earnedAt.containsKey("pet_dry_500"), "Pet dry tiers use their own thresholds");
+        yes(state.earnedAt.containsKey("pet_dry_500"), "The 50-kill pet dry tier is accessible");
         eq(
                 0,
                 Achievements.evaluate(ledger, state, BASE + 3, true).unlocks().size(),
@@ -376,31 +378,31 @@ public final class AchievementChecks {
                 0,
                 oldCatalog.earnedAt.get("fang_dry_250"),
                 "Imported dry progress does not invent an unlock date");
-        eq(2, oldCatalog.catalogVersion, "The dry milestone catalog is acknowledged");
+        eq(3, oldCatalog.catalogVersion, "The rebalanced milestone catalog is acknowledged");
 
         Ledger boundary = new Ledger();
-        for (int index = 0; index < 99; index++) {
+        for (int index = 0; index < 19; index++) {
             fight(boundary, 90_000, 10_000, FightRecord.Outcome.COUNTED, "server");
         }
-        FightRecord hundredth =
+        FightRecord twentieth =
                 fight(boundary, 90_000, 10_000, FightRecord.Outcome.COUNTED, "server");
-        add(boundary, Ledger.Kind.LOOT, "TARANTULA_LEGENDARY", 1, 0, "armor_stand", hundredth.id);
-        add(boundary, Ledger.Kind.LOOT, "ARACHNE_FANG", 1, 0, "armor_stand", hundredth.id);
+        add(boundary, Ledger.Kind.LOOT, "TARANTULA_LEGENDARY", 1, 0, "armor_stand", twentieth.id);
+        add(boundary, Ledger.Kind.LOOT, "ARACHNE_FANG", 1, 0, "armor_stand", twentieth.id);
         eq(
-                99,
+                19,
                 AchievementFacts.from(boundary).petDryStreak(),
                 "The rewarded fight is not counted as a dry kill");
         eq(
-                99,
+                19,
                 AchievementFacts.from(boundary).fangDryStreak(),
                 "A drop on the target fight does not manufacture a dry milestone");
         AchievementState imported = fresh(boundary);
         yes(
                 !imported.earnedAt.containsKey("pet_dry_100"),
-                "A reward before 100 dry fights keeps pet milestone locked");
+                "A reward before 20 dry fights keeps pet milestone locked");
         yes(
                 !imported.earnedAt.containsKey("fang_dry_100"),
-                "Fang dry thresholds exclude the reward fight");
+                "The 25-fight Fang tier stays locked before its threshold");
 
         Ledger legacy = new Ledger();
         add(legacy, Ledger.Kind.KILL, "ARACHNE", 2_000, 0, "server", 0);
@@ -416,7 +418,51 @@ public final class AchievementChecks {
         eq(0, compatible.fangDryStreak(), "Existing callers have no fabricated fang dry progress");
     }
 
+    private static void welcomeAndRebalancedMigration() {
+        Ledger ledger = new Ledger();
+        AchievementState live = fresh(ledger);
+        yes(!live.earnedAt.containsKey("arachne_non"), "An empty journal is not a Sanctuary visit");
+        yes(ledger.visitSanctuary(BASE), "First valid Sanctuary visit is recorded");
+        var update = Achievements.evaluate(ledger, live, BASE + 1, true);
+        eq(1, update.unlocks().size(), "The welcome milestone is accessible immediately");
+        yes(live.earnedAt.containsKey("arachne_non"), "Welcome uses saved location evidence");
+        yes(!ledger.visitSanctuary(BASE + 2), "Repeated location evidence is inert");
+        eq(
+                0,
+                Achievements.evaluate(ledger, live, BASE + 2, true).unlocks().size(),
+                "Welcome never repeats");
+        AchievementState old = new AchievementState();
+        old.initialized = true;
+        old.catalogVersion = 2;
+        old.earnedAt.put("kills_1000", BASE - 1);
+        old.notified.add("kills_1000");
+        var migration = Achievements.evaluate(ledger, old, BASE + 3, true);
+        eq(
+                BASE - 1,
+                old.earnedAt.get("kills_1000"),
+                "Lower targets never erase a previous unlock date");
+        eq(0, migration.unlocks().size(), "Rebalanced catalog migration stays silent");
+        eq(
+                25,
+                progress(ledger, old, "kills_100").definition().target(),
+                "The old 100-kill ID now has a reachable 25-kill target");
+        eq(
+                1,
+                progress(ledger, old, "crystals_10").definition().target(),
+                "First own Crystal is a milestone");
+        eq(
+                90_000,
+                progress(ledger, old, "speed_60").definition().target(),
+                "First speed target tolerates ordinary fights");
+        Ledger legacy = new Ledger();
+        add(legacy, Ledger.Kind.KILL, "ARACHNE", 1, 0, "server", 0);
+        yes(
+                !fresh(legacy).earnedAt.containsKey("arachne_non"),
+                "Importing kills cannot invent a recorded visit");
+    }
+
     public static void main(String[] args) throws Exception {
+        welcomeAndRebalancedMigration();
         registryAndEmptyState();
         trustedFactsAndSpeed();
         backfillDeliveryAndPersistence();

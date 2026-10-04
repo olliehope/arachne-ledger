@@ -77,6 +77,7 @@ public final class GraphPreferences {
     public Metric primary = Metric.PROFIT;
     public boolean showProjection = false;
     public boolean showSpawns = false;
+    public boolean showRareDrops = true;
     public boolean showTotal = true;
     public boolean showHourly = true;
     public boolean showProjectedHourly = true;
@@ -131,5 +132,24 @@ public final class GraphPreferences {
         enabled.addAll(enabledSeries());
         series = enabled;
         primary = effectiveMetric();
+    }
+
+    /** Settings screens edit this independent draft and apply it only when Save is pressed. */
+    public GraphPreferences copy() {
+        GraphPreferences copy = new GraphPreferences();
+        copy.series = EnumSet.noneOf(Metric.class);
+        copy.series.addAll(enabledSeries());
+        copy.primary = effectiveMetric();
+        copy.showProjection = showProjection;
+        copy.showSpawns = showSpawns;
+        copy.showRareDrops = showRareDrops;
+        copy.showTotal = showTotal;
+        copy.showHourly = showHourly;
+        copy.showProjectedHourly = showProjectedHourly;
+        copy.showProjectedTotal = showProjectedTotal;
+        copy.showActiveTime = showActiveTime;
+        copy.showScope = showScope;
+        copy.showSpawnCount = showSpawnCount;
+        return copy;
     }
 }

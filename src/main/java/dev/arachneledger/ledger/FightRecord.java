@@ -2,6 +2,13 @@ package dev.arachneledger.ledger;
 
 /** Persistent fight metadata; all coin and drop values come from its journal entries. */
 public final class FightRecord {
+    /** The observed completed ritual, rather than an inferred tier from today's item prices. */
+    public enum SummonTier {
+        UNKNOWN,
+        CALLING,
+        CRYSTAL
+    }
+
     public enum Outcome {
         FIGHTING,
         WAITING_DAMAGE,
@@ -19,6 +26,7 @@ public final class FightRecord {
 
     public long damage = -1, minimumDamage = 10_000;
     public Outcome outcome = Outcome.FIGHTING;
+    public SummonTier summonTier = SummonTier.UNKNOWN;
 
     public long duration() {
         return spawned > 0 && died > 0 ? Math.max(0, died - spawned) : -1;
@@ -40,6 +48,8 @@ public final class FightRecord {
     }
 
     public void validate() {
+        // Missing metadata in old saves must never become an invented T1 or T2 summon.
+        if (summonTier == null) summonTier = SummonTier.UNKNOWN;
         if (id < 1
                 || session < 1
                 || spawned < 0

@@ -15,7 +15,31 @@ public record AchievementFacts(
         long legendaryPets,
         long fastestKill,
         long petDryStreak,
-        long fangDryStreak) {
+        long fangDryStreak,
+        long sanctuaryVisit) {
+
+    public AchievementFacts(
+            long countedKills,
+            long crystalPlacements,
+            long soulString,
+            long pets,
+            long fangs,
+            long legendaryPets,
+            long fastestKill,
+            long petDryStreak,
+            long fangDryStreak) {
+        this(
+                countedKills,
+                crystalPlacements,
+                soulString,
+                pets,
+                fangs,
+                legendaryPets,
+                fastestKill,
+                petDryStreak,
+                fangDryStreak,
+                0);
+    }
 
     public AchievementFacts(
             long countedKills,
@@ -88,11 +112,13 @@ public record AchievementFacts(
                 legendary,
                 fastest,
                 RngSince.longestDryStreak(history, RngSince.Reward.ANY_PET),
-                RngSince.longestDryStreak(history, RngSince.Reward.FANG));
+                RngSince.longestDryStreak(history, RngSince.Reward.FANG),
+                ledger.sanctuaryVisitedAt > 0 ? 1 : 0);
     }
 
     public long value(Metric metric) {
         return switch (metric) {
+            case SANCTUARY_VISIT -> sanctuaryVisit;
             case COUNTED_KILLS -> countedKills;
             case CRYSTAL_PLACEMENTS -> crystalPlacements;
             case SOUL_STRING -> soulString;

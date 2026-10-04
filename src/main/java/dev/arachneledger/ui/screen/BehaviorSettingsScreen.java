@@ -122,7 +122,7 @@ public final class BehaviorSettingsScreen extends SettingsListScreen {
                         panelY + panelHeight - 24,
                         buttonWidth,
                         20,
-                        "Back",
+                        "Cancel",
                         false,
                         this::onClose));
     }

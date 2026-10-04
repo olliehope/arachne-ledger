@@ -58,22 +58,16 @@ public final class RecapScreen extends Screen {
         panelHeight = Math.min(328, height - 20);
         panelX = (width - panelWidth) / 2;
         panelY = (height - panelHeight) / 2;
-        FlatButton totalButton =
-                button(
-                        panelX + panelWidth - 120,
-                        panelY + 8,
-                        43,
-                        "Total",
-                        total,
-                        () -> scope(true));
         FlatButton sessionButton =
                 button(
-                        panelX + panelWidth - 74,
+                        panelX + panelWidth - 120,
                         panelY + 8,
                         62,
                         "Session",
                         !total,
                         () -> scope(false));
+        FlatButton totalButton =
+                button(panelX + panelWidth - 54, panelY + 8, 42, "Total", total, () -> scope(true));
         totalButton.active = tab != Tab.LAST;
         sessionButton.active = tab != Tab.LAST;
         button(
@@ -121,7 +115,7 @@ public final class RecapScreen extends Screen {
     }
 
     private void scope(boolean selected) {
-        total = selected;
+        if (ScopeSelection.select(tracker, selected)) total = selected;
         scrollOffset = 0;
         rebuildWidgets();
     }

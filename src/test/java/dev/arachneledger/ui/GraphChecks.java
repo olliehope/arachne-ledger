@@ -9,6 +9,7 @@ import dev.arachneledger.skyblock.PurseCoins;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -74,6 +75,12 @@ public final class GraphChecks {
         eq(1, empty.series().get(PROFIT).size(), "Actual graphs begin at zero");
         eq(0, empty.series().get(PROFIT).getFirst().profit(), "Initial zero value");
         yes(GraphData.build(ledger, false, prefs) == empty, "Unchanged render reuses snapshot");
+        ledger.tick(50);
+        yes(
+                GraphData.build(ledger, false, prefs) == empty,
+                "Frames within one displayed clock second reuse graph calculations");
+        // Restore the fixture clock before adding receipts so existing axis examples stay exact.
+        ledger.activeMillis = 0;
 
         add(ledger, Ledger.Kind.CRYSTAL, "ARACHNE_CRYSTAL", 1, 100_000);
         FightRecord counted = ledger.beginFight(1_000_000, 10_000);
@@ -341,9 +348,90 @@ public final class GraphChecks {
         yes(
                 explicitNull.graph.enabledSeries().equals(Set.of(PROFIT)),
                 "Null graph settings recover to safe defaults");
+        samplingAndRareMarkers();
         System.out.println(
                 "PASS: "
                         + checks
                         + " selectable graph, spawn, projection, scope and cache checks.");
+    }
+
+    private static void samplingAndRareMarkers() {
+        List<Ledger.Point> points = new ArrayList<>();
+        points.add(new Ledger.Point(0, 0));
+        for (int i = 1; i <= 100_000; i++) {
+            points.add(new Ledger.Point(i, i % 2 == 0 ? -i : i));
+        }
+        GraphSamples.Index index = new GraphSamples.Index(List.copyOf(points));
+        List<GraphSamples.Bucket> buckets = index.buckets(100_000, 120);
+        yes(buckets.size() <= 121, "Large journal rendering is bounded by screen columns");
+        eq(-100_000, buckets.getLast().last(), "Sampling retains the final recorded step");
+        eq(
+                -100_000,
+                buckets.stream().mapToDouble(GraphSamples.Bucket::minimum).min().orElseThrow(),
+                "Sampling retains short negative peaks within a column");
+        eq(
+                99_999,
+                buckets.stream().mapToDouble(GraphSamples.Bucket::maximum).max().orElseThrow(),
+                "Sampling retains short positive peaks within a column");
+        eq(-100_000, index.minimum(), "Cached range retains true minimum");
+        eq(99_999, index.maximum(), "Cached range retains true maximum");
+        GraphSamples.Index sameInstant =
+                new GraphSamples.Index(
+                        List.of(
+                                new Ledger.Point(0, 0),
+                                new Ledger.Point(0, 1_000),
+                                new Ledger.Point(0, -2_000),
+                                new Ledger.Point(0, 10)));
+        var instant = sameInstant.buckets(0, 20).getFirst();
+        eq(10, instant.last(), "Entries at the same instant retain their final value");
+        eq(-2_000, instant.minimum(), "Same-instant cost peak remains visible");
+        eq(1_000, instant.maximum(), "Same-instant income peak remains visible");
+
+        Ledger rare = new Ledger();
+        FightRecord fight = rare.beginFight(1_000_000, 10_000);
+        rare.add(Ledger.Kind.LOOT, "TARANTULA_LEGENDARY", 1, 0, "armor_stand", 1_000_010, fight.id);
+        rare.add(Ledger.Kind.LOOT, "STRING", 10, 3, "pickup", 1_000_011, fight.id);
+        rare.add(Ledger.Kind.LOOT, "ARACHNE_FANG", 1, 100, "manual", 1_000_012, fight.id);
+        GraphPreferences prefs = new GraphPreferences();
+        var first = GraphData.build(rare, false, prefs);
+        eq(1, first.rareDrops().size(), "Only detected rare items receive graph markers");
+        eq(
+                fight.id,
+                first.rareDrops().getFirst().fightId(),
+                "Rare marker retains original fight link");
+        eq(
+                0,
+                first.rareDrops().getFirst().value(),
+                "Unpriced rare markers keep their known zero receipt");
+        rare.reprice("TARANTULA_LEGENDARY", 1_000_000);
+        eq(
+                1_000_000,
+                GraphData.build(rare, false, prefs).rareDrops().getFirst().value(),
+                "Explicit repricing refreshes a rare marker value");
+        rare.newSession();
+        eq(
+                0,
+                GraphData.build(rare, false, prefs).rareDrops().size(),
+                "Session reset hides previous rare markers");
+        eq(
+                1,
+                GraphData.build(rare, true, prefs).rareDrops().size(),
+                "Total view retains rare markers");
+        Graph.renderWork(GraphData.build(rare, true, prefs), prefs, 120, 100, false);
+        int cachedViews = Graph.cachedViewCount();
+        for (int second = 0; second < 20; second++) {
+            rare.tick(1_000);
+            Graph.renderWork(GraphData.build(rare, true, prefs), prefs, 120, 100, false);
+        }
+        eq(
+                cachedViews,
+                Graph.cachedViewCount(),
+                "A changing clock replaces the same viewport instead of retaining old histories");
+        GraphPreferences copy = prefs.copy();
+        copy.showRareDrops = false;
+        copy.setVisible(PROFIT, false);
+        yes(
+                prefs.showRareDrops && prefs.enabledSeries().contains(PROFIT),
+                "Graph drafts do not mutate saved marker or series preferences");
     }
 }

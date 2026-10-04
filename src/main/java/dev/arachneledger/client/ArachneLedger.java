@@ -92,7 +92,10 @@ public final class ArachneLedger implements ClientModInitializer {
                         () -> ClientScreens.request(ClientScreens.Page.SETTINGS),
                         () -> ClientScreens.request(ClientScreens.Page.ACHIEVEMENTS),
                         () -> ClientScreens.request(ClientScreens.Page.RECAP),
-                        () -> ClientScreens.request(ClientScreens.Page.DIAGNOSTICS)));
+                        () -> ClientScreens.request(ClientScreens.Page.DIAGNOSTICS),
+                        () -> ClientScreens.request(ClientScreens.Page.PROGRESS),
+                        () -> ClientScreens.request(ClientScreens.Page.GOALS),
+                        () -> ClientScreens.request(ClientScreens.Page.SUPPLIES)));
     }
 
     private void tick(
@@ -109,6 +112,7 @@ public final class ArachneLedger implements ClientModInitializer {
         updatePricesAndAlerts(client, now);
         observeRewardLabels(client, now);
         ClientNotifications.publish(client, tracker);
+        ClientGoalNotifications.publish(client, tracker);
         handleKeybindings(openDashboardKey, toggleScopeKey, cycleHudViewKey);
         ClientScreens.openRequested(client);
     }

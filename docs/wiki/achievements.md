@@ -1,22 +1,28 @@
 # Achievements
 
-Open **Journal → Achievements** from the dashboard or run `/arachne achievements`. The achievement book has **23 unlocks**, grouped into Hunting, Summoning, Collection, Rare drops, and Speed. Progress is lifetime for the selected account/profile, independent of the dashboard's Session/Total choice.
+Open **Progress → Achievements** from the dashboard or run `/arachne achievements`. The achievement book has **28 unlocks**, grouped into Welcome, Hunting, Summoning, Collection, Rare drops, and Speed. Progress is lifetime for the selected account/profile, independent of the dashboard's Session/Total choice.
 
 Use **All**, **In progress**, or **Unlocked** to filter entries. The category button cycles categories; scroll or use the arrow buttons to browse. Each visible milestone shows its description and progress. Hover for the full details and unlock date.
 
 | Achievement | Targets |
 | --- | --- |
-| Spider Exterminator I–III | 10 / 100 / 1,000 counted Arachne kills |
-| Summoner I–III | 10 / 100 / 500 of your own Arachne Crystal placements |
-| Silk Merchant I–III | 1,000 / 10,000 / 100,000 detected Soul String |
+| Real Arachne Non | Visit Arachne's Sanctuary with tracking active |
+| One Down, Eight Legs | Your first counted Arachne fight |
+| Spider Exterminator I–III | 10 / 25 / 100 counted Arachne kills |
+| Sanctuary Regular / Arachne's Landlord | 250 / 1,000 counted kills; the latter is an optional challenge |
+| Summoner I–III | 1 / 5 / 25 of your own Arachne Crystal placements |
+| Ritual Regular | Optional challenge: 100 of your own Crystal placements |
+| Silk Merchant I–III | 100 / 1,000 / 10,000 detected Soul String |
 | Lucky Legs | Your first detected Tarantula Pet |
-| Fang Collector I–III | 1 / 10 / 100 detected Arachne Fangs |
-| Looking for a Pet I–III | 100 / 500 / 1,000 consecutive qualifying fights without a Tarantula Pet |
-| Fangless I–III | 50 / 100 / 250 consecutive qualifying fights without an Arachne Fang |
-| Speed Weaver I–III | A qualifying, confirmed timed fight in 60 / 45 / 30 seconds or less |
+| Fang Collector I–III | 1 / 5 / 25 detected Arachne Fangs |
+| Looking for a Pet I–III | 20 / 50 / 100 consecutive qualifying fights without a Tarantula Pet |
+| Fangless I–III | 10 / 25 / 50 consecutive qualifying fights without an Arachne Fang |
+| Speed Weaver I–III | A qualifying, confirmed timed fight in 90 / 60 / 45 seconds or less |
 | Hidden milestone | Discover a rare pet milestone to reveal its name and goal |
 
 ## What counts
+
+Click a revealed achievement row to pin its progress to the text HUD; click it again to unpin. Hidden goals cannot be pinned before they are revealed. The pin is optional and does not affect the financial rows.
 
 Kill and speed goals require a retained server kill receipt and a Counted fight meeting its saved damage threshold. Speed also requires a confirmed spawn and a positive spawn-to-death duration. Trusted legacy server kill receipts can fill kill milestones, but never invent a speed record.
 
@@ -36,6 +42,6 @@ New live unlocks can print a local message after their state is saved:
 [Arachne] Achievement Unlocked >> Looking for a Pet I
 ```
 
-Hover for the category and objective, or click to open the achievement book. **Settings → Tracking → Achievement chat** controls the message. **Settings → Farming cues → Alerts** independently controls achievement titles and sounds. Unlocks still progress and are acknowledged when cues are off, so enabling them does not replay earlier milestones.
+Hover for the category and objective, or click to open the achievement book. **Settings → Tracking & notifications → Achievement chat** controls the message. **Settings → Timers & sounds → Alerts** independently controls achievement titles and sounds. Unlocks still progress and are acknowledged when cues are off, so enabling them does not replay earlier milestones.
 
 Earned achievements stay earned if receipts are later corrected or removed. Progress toward locked goals follows the remaining trusted observations. [Personal records](tracking-and-profit.md#session-recaps-and-personal-records) are recalculated from current receipts instead.

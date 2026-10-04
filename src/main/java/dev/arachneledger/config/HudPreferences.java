@@ -66,6 +66,8 @@ public final class HudPreferences {
     public boolean showScope = false;
     public boolean showStatus = true;
     public boolean showUnpricedWarning = false;
+    public boolean showCountdown = false;
+    public String pinnedAchievement = "";
 
     // Hiding loot does not discard the user's row limit or preferred value display.
     public int maxLootRows = 3;
@@ -105,6 +107,8 @@ public final class HudPreferences {
         showScope = classic;
         showStatus = !lootLedger;
         showUnpricedWarning = classic;
+        showCountdown = false;
+        pinnedAchievement = "";
         sort = Sort.VALUE;
         maxLootRows = lootLedger ? 8 : 3;
         hiddenItems = new LinkedHashSet<>();
@@ -113,6 +117,11 @@ public final class HudPreferences {
 
     /** Normalize damaged or older display settings without resetting custom row selections. */
     public void validate() {
+        if (pinnedAchievement == null
+                || dev.arachneledger.achievement.Achievements.DEFINITIONS.stream()
+                        .noneMatch(definition -> definition.id().equals(pinnedAchievement))) {
+            pinnedAchievement = "";
+        }
         if (layout == null) {
             layout = Layout.MINIMAL;
         }
@@ -130,5 +139,71 @@ public final class HudPreferences {
             }
         }
         hiddenItems = supportedHiddenItems;
+    }
+
+    /** A detached copy makes settings drafts and named presets independent of live choices. */
+    public HudPreferences copy() {
+        HudPreferences copy = new HudPreferences();
+        copy.layout = layout;
+        copy.sort = sort;
+        copy.showTitle = showTitle;
+        copy.showLoot = showLoot;
+        copy.showLootValues = showLootValues;
+        copy.showRareRates = showRareRates;
+        copy.showKillsPerHour = showKillsPerHour;
+        copy.showScavenger = showScavenger;
+        copy.showCrystalCosts = showCrystalCosts;
+        copy.showCallingCosts = showCallingCosts;
+        copy.showKills = showKills;
+        copy.showTotalProfit = showTotalProfit;
+        copy.showProfitPerHour = showProfitPerHour;
+        copy.showProjectedPerHour = showProjectedPerHour;
+        copy.showRegularProfit = showRegularProfit;
+        copy.showRegularPerHour = showRegularPerHour;
+        copy.showActiveTime = showActiveTime;
+        copy.showScope = showScope;
+        copy.showStatus = showStatus;
+        copy.showUnpricedWarning = showUnpricedWarning;
+        copy.showCountdown = showCountdown;
+        copy.pinnedAchievement = pinnedAchievement;
+        copy.maxLootRows = maxLootRows;
+        copy.hiddenItems =
+                hiddenItems == null ? new LinkedHashSet<>() : new LinkedHashSet<>(hiddenItems);
+        copy.rowOrder = HudRowOrder.normalize(rowOrder);
+        return copy;
+    }
+
+    /** Exact comparisons avoid allocations and hash collisions in mutable display settings. */
+    public boolean sameDisplay(HudPreferences other) {
+        return other != null
+                && displayFlags() == other.displayFlags()
+                && layout == other.layout
+                && sort == other.sort
+                && maxLootRows == other.maxLootRows
+                && hiddenItems.equals(other.hiddenItems)
+                && rowOrder.equals(other.rowOrder)
+                && pinnedAchievement.equals(other.pinnedAchievement);
+    }
+
+    private int displayFlags() {
+        return (showTitle ? 1 : 0)
+                | (showLoot ? 1 << 1 : 0)
+                | (showLootValues ? 1 << 2 : 0)
+                | (showRareRates ? 1 << 3 : 0)
+                | (showKillsPerHour ? 1 << 4 : 0)
+                | (showScavenger ? 1 << 5 : 0)
+                | (showCrystalCosts ? 1 << 6 : 0)
+                | (showCallingCosts ? 1 << 7 : 0)
+                | (showKills ? 1 << 8 : 0)
+                | (showTotalProfit ? 1 << 9 : 0)
+                | (showProfitPerHour ? 1 << 10 : 0)
+                | (showProjectedPerHour ? 1 << 11 : 0)
+                | (showRegularProfit ? 1 << 12 : 0)
+                | (showRegularPerHour ? 1 << 13 : 0)
+                | (showActiveTime ? 1 << 14 : 0)
+                | (showScope ? 1 << 15 : 0)
+                | (showStatus ? 1 << 16 : 0)
+                | (showUnpricedWarning ? 1 << 17 : 0)
+                | (showCountdown ? 1 << 18 : 0);
     }
 }

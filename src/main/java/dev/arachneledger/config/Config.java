@@ -5,8 +5,10 @@ import dev.arachneledger.pricing.GearValuation;
 import dev.arachneledger.pricing.NpcPrices;
 import dev.arachneledger.skyblock.Catalog;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -47,6 +49,8 @@ public final class Config {
     public boolean sessionRecapChat = true;
     public boolean dashboardFights = false;
     public FarmingPreferences farming = new FarmingPreferences();
+    public SessionGoals goals = new SessionGoals();
+    public List<HudPreset> hudPresets = new ArrayList<>();
     // Valuation preferences and participation threshold.
     public boolean autoBazaar = false;
     public boolean ironman = false;
@@ -254,6 +258,9 @@ public final class Config {
     private void migrateOptionalSettings() {
         if (farming == null) farming = new FarmingPreferences();
         farming.validate();
+        if (goals == null) goals = new SessionGoals();
+        goals.validate();
+        hudPresets = HudPreset.normalize(hudPresets);
         migrateNpcDefaults();
         migratePrices();
         if (bazaarPrices == null) {

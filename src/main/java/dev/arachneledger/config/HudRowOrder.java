@@ -39,7 +39,8 @@ public final class HudRowOrder {
                     new Definition("status", "Tracking status", Group.METRICS),
                     new Definition("unpriced", "Unpriced warning", Group.METRICS),
                     new Definition("regularProfit", "Profit without RNG", Group.METRICS),
-                    new Definition("regularHourly", "Without RNG / hour", Group.METRICS));
+                    new Definition("regularHourly", "Without RNG / hour", Group.METRICS),
+                    new Definition("pinned", "Pinned achievement", Group.METRICS));
 
     private static final Set<String> SUPPORTED =
             Set.copyOf(ROWS.stream().map(Definition::id).toList());

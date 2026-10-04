@@ -38,7 +38,7 @@ public final class PriceSettingsScreen extends Screen {
     private String callingInput = Double.toString(draft.callingCost), displayedPriceItemId;
     private int selectedItemIndex, panelX, panelY, panelWidth;
     private boolean useRecipeCost = !draft.crystalConfigured;
-    private String note = "Save applies all choices. Back discards unsaved changes.";
+    private String note = "Save applies all choices. Cancel discards unsaved changes.";
 
     public PriceSettingsScreen(Screen parent) {
         super(Component.literal("Arachne prices"));
@@ -345,7 +345,7 @@ public final class PriceSettingsScreen extends Screen {
                         panelY + 205,
                         actionButtonWidth,
                         20,
-                        "Back",
+                        "Cancel",
                         false,
                         this::onClose));
     }

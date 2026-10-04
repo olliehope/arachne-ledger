@@ -29,12 +29,12 @@ public final class SettingsScreen extends Screen {
         panelY = (height - panelHeight) / 2;
         category(
                 0,
-                "HUD",
+                "HUD & layouts",
                 "Choose individual rows, items and layouts; move or resize the overlay.",
                 () -> minecraft.setScreen(new HudOptionsScreen(this)));
         category(
                 1,
-                "Tracking",
+                "Tracking & notifications",
                 "Minimum damage, kill summaries, rare-drop titles and Scavenger coins.",
                 () -> minecraft.setScreen(new BehaviorSettingsScreen(this)));
         category(
@@ -44,12 +44,12 @@ public final class SettingsScreen extends Screen {
                 () -> minecraft.setScreen(new PriceSettingsScreen(this)));
         category(
                 3,
-                "Graph",
+                "Graph & markers",
                 "Choose graph lines, projections, spawn markers and graph text.",
                 () -> minecraft.setScreen(new GraphOptionsScreen(this)));
         category(
                 4,
-                "Farming cues",
+                "Timers & sounds",
                 "Pedestal countdown, fight time, local alerts and compact chat.",
                 () -> minecraft.setScreen(new FarmingSettingsScreen(this)));
         addRenderableWidget(
@@ -95,7 +95,13 @@ public final class SettingsScreen extends Screen {
                 panelY + 12,
                 Hud.WHITE,
                 true);
-        graphics.text(font, "Choose what to change.", panelX + 16, panelY + 30, Graph.MUTED, false);
+        graphics.text(
+                font,
+                font.plainSubstrByWidth("Each page has Save and Cancel.", panelWidth - 32),
+                panelX + 16,
+                panelY + 30,
+                Graph.MUTED,
+                false);
         if (!ArachneLedger.tracker.error.isEmpty()) {
             graphics.text(
                     font,

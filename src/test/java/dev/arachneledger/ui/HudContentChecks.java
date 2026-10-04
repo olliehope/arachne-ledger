@@ -114,10 +114,65 @@ public final class HudContentChecks {
         customRowOrder(root.resolve("order"));
         profitWithoutRng(root.resolve("without-rng"));
         lootLedgerContent(root.resolve("loot-ledger"));
+        cacheAndPinnedGoal(root.resolve("cache"));
         System.out.println("PASS: " + checks + " HUD content, selection, scope and layout checks.");
     }
 
     private record RowToggle(String id, Consumer<HudPreferences> hide) {}
+
+    private static void cacheAndPinnedGoal(Path directory) {
+        Tracker tracker = emptyTracker(directory);
+        HudContent.Cache cache = new HudContent.Cache();
+        var first = cache.get(tracker);
+        for (int frame = 0; frame < 1_000; frame++) {
+            yes(
+                    first == cache.get(tracker),
+                    "Unchanged frames reuse the same immutable row snapshot");
+        }
+        tracker.ledger.tick(200);
+        yes(first == cache.get(tracker), "Subsecond active ticks do not rebuild financial rows");
+        tracker.ledger.tick(800);
+        var nextSecond = cache.get(tracker);
+        yes(first != nextSecond, "An active second refreshes hourly labels");
+        tracker.config.hudPreferences.pinnedAchievement = "kill_first";
+        var pinned = cache.get(tracker);
+        same("0 / 1", row(pinned, "pinned").value(), "Pinned goal shows accessible progress");
+        same(
+                "One Down, Eight Legs",
+                row(pinned, "pinned").label(),
+                "Pinned goal retains its own title");
+        add(tracker.ledger, Ledger.Kind.KILL, "ARACHNE", 1, 0);
+        var changed = cache.get(tracker);
+        yes(changed != pinned, "A receipt mutation refreshes rows immediately");
+        // Fixture receipts are not proven automatic kills, so the pinned goal stays untouched.
+        same(
+                "0 / 1",
+                row(changed, "pinned").value(),
+                "Manual fixture counts cannot manufacture a goal");
+        tracker.ledger.add(Ledger.Kind.KILL, "ARACHNE", 1, 0, "server", BASE + 1_000);
+        same(
+                "1 / 1",
+                row(cache.get(tracker), "pinned").value(),
+                "Proven lifetime progress refreshes pinned goals");
+        long revision = tracker.ledger.revision();
+        double profit = tracker.ledger.stats(true).profit();
+        tracker.config.hudPreferences.hiddenItems.add("STRING");
+        yes(changed != cache.get(tracker), "Mutable item filters invalidate display rows");
+        same(revision, tracker.ledger.revision(), "Display caching never mutates history");
+        same(profit, tracker.ledger.stats(true).profit(), "Pinned goals never change accounting");
+        tracker.config.hudPreferences.pinnedAchievement = "";
+        yes(
+                allRows(cache.get(tracker)).stream().noneMatch(r -> r.id().equals("pinned")),
+                "Clearing a goal removes its row");
+        Tracker other = emptyTracker(directory.resolve("other"));
+        yes(
+                cache.get(tracker) != cache.get(other),
+                "Account and tracker identity cannot share cached rows");
+        same(
+                "27:14:08",
+                Hud.shortTime((27 * 3_600L + 14 * 60L + 8) * 1_000),
+                "HUD time keeps hours past a day");
+    }
 
     private static void summariesAndSelections(Path directory) {
         Tracker tracker = fixture(directory);
@@ -166,7 +221,7 @@ public final class HudContentChecks {
         same("200", row(classic, "callingCosts").value(), "Calling row includes every placement");
         same("1", row(classic, "kills").value(), "Kill row uses journal kills");
         same(
-                "1m 0s",
+                "00:01:00",
                 row(classic, "activeTime").value(),
                 "Active row uses the selected time scope");
         same(
@@ -374,7 +429,7 @@ public final class HudContentChecks {
                 "Lifetime profit combines both sessions");
         same("2", row(total, "kills").value(), "Lifetime kills combine both sessions");
         same(
-                "2m 0s",
+                "00:02:00",
                 row(total, "activeTime").value(),
                 "Lifetime active time combines both session clocks");
         same("Total", row(total, "scope").value(), "The selected scope is identified correctly");

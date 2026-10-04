@@ -15,12 +15,16 @@ import java.util.List;
 /** Owns fight transitions and damage qualification; it never prices loot or writes files. */
 final class FightLifecycle {
     private static final long DAMAGE_SUMMARY_WINDOW_MILLIS = 5_000;
+    private static final long SUMMON_TIER_WINDOW_MILLIS = 75_000;
+    private static final long DEATH_RELAY_GUARD_MILLIS = 2_000;
     private final TrackingClock clock;
     private final FightReports reports;
     private final TrackingDiagnostics diagnostics;
     final List<Long> pendingSummonEntryIds = new ArrayList<>();
     TrackedFight activeFight, rewardFight, awaitingDamageFight;
     long awaitingDamageSince, lastDeathAt;
+    private FightRecord.SummonTier pendingTier = FightRecord.SummonTier.UNKNOWN;
+    private long pendingTierAt;
     private boolean changed;
 
     FightLifecycle(TrackingClock clock, FightReports reports, TrackingDiagnostics diagnostics) {
@@ -42,22 +46,28 @@ final class FightLifecycle {
         awaitingDamageSince = 0;
         lastDeathAt = 0;
         pendingSummonEntryIds.clear();
+        pendingTier = FightRecord.SummonTier.UNKNOWN;
+        pendingTierAt = 0;
     }
 
     void interrupt(Ledger ledger) {
+        boolean historyChanged = false;
         if (activeFight != null) {
             activeFight.history.outcome = FightRecord.Outcome.INTERRUPTED;
             activeFight.history.activeEnd = ledger.activeMillis;
             changed = true;
+            historyChanged = true;
         }
         if (awaitingDamageFight != null
                 && awaitingDamageFight.history.outcome == FightRecord.Outcome.WAITING_DAMAGE) {
             awaitingDamageFight.history.outcome = FightRecord.Outcome.MISSING_DAMAGE;
             changed = true;
+            historyChanged = true;
         }
+        if (historyChanged) ledger.historyChanged();
     }
 
-    void expireDamageSummary(long now) {
+    void expireDamageSummary(Ledger ledger, long now) {
         if (awaitingDamageFight != null
                 && now - awaitingDamageSince > DAMAGE_SUMMARY_WINDOW_MILLIS) {
             awaitingDamageFight.history.outcome = FightRecord.Outcome.MISSING_DAMAGE;
@@ -70,7 +80,30 @@ final class FightLifecycle {
             awaitingDamageFight = null;
             awaitingDamageSince = 0;
             changed = true;
+            ledger.historyChanged();
         }
+    }
+
+    /** A fresh completed ritual is stronger evidence than a fight left open by a missed death. */
+    void observeSummon(Ledger ledger, Messages.Summon summon, long now) {
+        if (activeFight != null) {
+            activeFight.history.outcome = FightRecord.Outcome.INTERRUPTED;
+            activeFight.history.activeEnd = ledger.activeMillis;
+            diagnostics.record(
+                    now,
+                    SPAWN,
+                    INFO,
+                    "Fight " + activeFight.history.id,
+                    "Fresh ritual recovered a missed death; previous fight was not counted");
+            activeFight = null;
+            changed = true;
+            ledger.historyChanged();
+        }
+        pendingTier =
+                summon == Messages.Summon.CRYSTAL
+                        ? FightRecord.SummonTier.CRYSTAL
+                        : FightRecord.SummonTier.CALLING;
+        pendingTierAt = now;
     }
 
     void observeBossActivity(Ledger ledger, Config config, Messages.Event event, long now) {
@@ -79,7 +112,7 @@ final class FightLifecycle {
         // cue, so old dialogue cannot restart the fight or extend the AFK grace.
         if (activeFight == null
                 && (confirmedSpawn || clock.activeGraceUntil == 0 || now < clock.summoningUntil)) {
-            activeFight = beginFight(ledger, confirmedSpawn ? now : 0, config.minimumDamage);
+            activeFight = beginFight(ledger, confirmedSpawn ? now : 0, config.minimumDamage, now);
             diagnostics.record(
                     now,
                     SPAWN,
@@ -116,8 +149,15 @@ final class FightLifecycle {
     }
 
     boolean observeBossDeath(Ledger ledger, Config config, long now) {
-        // A relayed results block cannot become another death without an intervening fight.
-        if (lastDeathAt != 0 && activeFight == null) {
+        // A real new ritual can recover a missed welcome, but immediately relayed old results
+        // cannot become another death. Neither path invents a confirmed spawn timestamp.
+        boolean freshRitual =
+                pendingTierAt > lastDeathAt
+                        && now >= pendingTierAt
+                        && now - pendingTierAt >= DEATH_RELAY_GUARD_MILLIS
+                        && now - pendingTierAt <= SUMMON_TIER_WINDOW_MILLIS
+                        && now - lastDeathAt >= DEATH_RELAY_GUARD_MILLIS;
+        if (lastDeathAt != 0 && activeFight == null && !freshRitual) {
             diagnostics.record(
                     now, DEATH, IGNORED, "Repeated boss death", "No intervening active fight");
             return false;
@@ -129,7 +169,9 @@ final class FightLifecycle {
             awaitingDamageFight.history.outcome = FightRecord.Outcome.MISSING_DAMAGE;
         }
         rewardFight =
-                activeFight != null ? activeFight : beginFight(ledger, 0, config.minimumDamage);
+                activeFight != null
+                        ? activeFight
+                        : beginFight(ledger, 0, config.minimumDamage, now);
         rewardFight.deathAt = now;
         awaitingDamageFight = rewardFight;
         activeFight = null;
@@ -146,6 +188,7 @@ final class FightLifecycle {
                 "Fight " + history.id,
                 "Waiting for your personal damage summary");
         changed = true;
+        ledger.historyChanged();
 
         clock.died(now);
         awaitingDamageSince = now;
@@ -167,6 +210,7 @@ final class FightLifecycle {
         awaitingDamageFight.damage = dealtDamage;
         awaitingDamageFight.history.damage = dealtDamage;
         changed = true;
+        ledger.historyChanged();
         if (dealtDamage >= awaitingDamageFight.history.minimumDamage) {
             countQualifiedKill(ledger, awaitingDamageFight, now);
         } else if (dealtDamage == 0) {
@@ -196,8 +240,16 @@ final class FightLifecycle {
         reports.add(completed, now, ledger.stats(false).kills());
     }
 
-    private TrackedFight beginFight(Ledger ledger, long spawnedAt, long minimumDamage) {
-        FightRecord history = ledger.beginFight(spawnedAt, Math.max(1, minimumDamage));
+    private TrackedFight beginFight(Ledger ledger, long spawnedAt, long minimumDamage, long now) {
+        FightRecord.SummonTier tier =
+                pendingTierAt > 0
+                                && now >= pendingTierAt
+                                && now - pendingTierAt <= SUMMON_TIER_WINDOW_MILLIS
+                        ? pendingTier
+                        : FightRecord.SummonTier.UNKNOWN;
+        FightRecord history = ledger.beginFight(spawnedAt, Math.max(1, minimumDamage), tier);
+        pendingTier = FightRecord.SummonTier.UNKNOWN;
+        pendingTierAt = 0;
         ledger.associateSummons(pendingSummonEntryIds, history.id);
         pendingSummonEntryIds.clear();
         changed = true;

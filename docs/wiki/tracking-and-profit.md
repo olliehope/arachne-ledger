@@ -17,6 +17,8 @@ Active time begins with a known spawn, includes the fight, and continues for up 
 
 Joining mid-fight can recover tracking from fresh boss activity, but the original spawn time is unknown. Such fights have no known-spawn marker. Pausing, leaving the tracking area, or changing worlds interrupts the current fight.
 
+A fresh completed ritual interrupts a stale fight when its death message was missed, allowing the next countdown to start. A real death and qualifying personal damage can recover the subsequent result when its spawn dialogue was missed; its original spawn time stays unknown. Elapsed time is shown as **HH:MM:SS**, with hours continuing past 24.
+
 The optional pedestal countdown is a separate **estimate**, marked with `~`, starting from a detected placement. Adaptive Crystal timing can adjust the estimate using nearby ritual particles; absent observations keep the configured fallback. It stops on the actual spawn signal. A countdown reaching zero never starts the active clock, creates a spawn marker, or counts a kill. See [Farming cues](farming.md#pedestal-countdown) for timing and label settings.
 
 ## Profit and hourly rates
@@ -37,13 +39,15 @@ The graph's projected total extends the selected total by five more active minut
 
 ## RNG history
 
-**Journal → RNG history** shows Session or Total observations for Any Tarantula pet, Epic pets, Legendary pets, and Arachne's Fang. Each row tracks detected quantity, qualifying kills, kills and active time since the last drop, and the longest dry run. With no drop in the selected scope, it shows the interval since that scope began.
+**Progress → RNG history** shows Session or Total observations for Any Tarantula pet, Epic pets, Legendary pets, and Arachne's Fang. Each row tracks detected quantity, qualifying kills, kills and active time since the last drop, and the longest dry run. With no drop in the selected scope, it shows the interval since that scope began.
 
 Only rewards associated with qualifying recorded fights contribute. Manual loot and low-damage fights cannot reset a run. Late rewards remain associated with their original fight, preserving later dry kills. Observed drops per 100 kills describe your history and do not predict the next drop. [Dry-run achievements](achievements.md) use the longest lifetime run rather than resetting their earned progress when a reward arrives.
 
 ## Graph
 
 Open **Graph → Options** to choose net profit, loot value, and cost lines; projection lines; and known-spawn markers. **Text metric** chooses which line supplies total and hourly labels. Loot value excludes coin income; costs include your summon costs and manual expenses.
+
+Optional **Rare drop markers** show detected Tarantula Pets and Arachne Fangs. Hover for the recorded reward and click to open its original fight. Manual entries do not create RNG markers. Graph options use a **Save/Cancel** draft. Dense histories are drawn at the visible pixel width while retaining spikes and recorded end values; the original journal keeps every receipt.
 
 You can independently hide total, projected total, hourly rate, projected hourly rate, spawn count, active time, and scope text. These choices are shared with the graph HUD and only affect display. Known spawns include fights skipped for damage, so their count can differ from kills.
 
@@ -59,11 +63,13 @@ Other marked coin rewards received during farming cannot be distinguished from S
 
 **Adjust** adds a missed drop, coin income, or expense. `/arachne undo` removes the latest current-session entry. `/arachne export` saves a CSV under `config/arachneledger/exports` using the selected scope.
 
-Kill chat summaries are printed after a short collection delay. Later rewards still update totals but do not rewrite an already printed summary. **Settings → Farming cues → Chat → Compact kill summary** reduces the visible line to kill number, duration, and net profit; hover for rewards, costs, damage, Scavenger income, and missing values.
+Kill chat summaries are printed after a short collection delay. Later rewards still update totals but do not rewrite an already printed summary. **Settings → Timers & sounds → Chat → Compact kill summary** reduces the visible line to kill number, duration, and net profit; hover for rewards, costs, damage, Scavenger income, and missing values.
 
-Rare-drop chat uses the reward's rarity color, an optional recorded value, and a trusted kill/time interval. Unknown values stay hidden. Spawn, reward, and achievement titles and sounds have independent local controls under **Farming cues**; they do not change financial entries or kill qualification.
+Rare-drop chat uses the reward's rarity color, an optional recorded value, and a trusted kill/time interval. Unknown values stay hidden. Spawn, reward, and achievement titles and sounds have independent local controls under **Timers & sounds**; they do not change financial entries or kill qualification.
 
 ## Session recaps and personal records
+
+The dashboard's **Copy** button copies the selected scope's recap to your local clipboard. **Overview** shows the latest completed or ignored fight, including its outcome; click it to inspect its receipts. **Progress** remains accessible from every dashboard tab.
 
 **Recap → Current** shows selected session or lifetime finances, active time, qualifying kills, actual average and fastest kill times, summon counts and spend, Scavenger coins, and RNG value. The average includes only qualifying fights with a confirmed spawn and death; joining mid-fight or old history without a trustworthy spawn never creates an estimated speed record. Older kill receipts may contribute financial/kill totals without enough metadata for the qualified-kill or timing rows.
 
@@ -74,3 +80,15 @@ Starting a new session captures the previous summary before resetting its bounda
 The best tracked session groups fight-associated receipts by their saved session IDs. It subtracts associated costs from unsuccessful attempts, and includes rewards only from qualifying kills. Unassociated historical receipts cannot be assigned to a past session, so this record can differ from a full financial session recap. Negative results are shown as recorded rather than replaced with zero.
 
 Personal records are recalculated after late rewards, explicit repricing, undo, or corrections. [Achievements](achievements.md) keep earned milestones once unlocked.
+
+## Calling and Crystal comparisons
+
+Open **Progress → T1 / T2 comparison** for qualifying kills, detected loot, Scavenger coins, actual costs, profit, profit without RNG, average fight time, and **fight-only profit/hour**. This last rate divides earnings by confirmed combat time and excludes the wait between spawns; use the dashboard rate for your overall farming pace.
+
+Tier comes from a completed Calling or Crystal ritual observed for that fight. Older fights and missed rituals remain **Unknown**. Another player's placement can identify a tier without charging you a cost. Unlinked manual corrections and receipts from skipped fights remain visible as unassigned income/costs instead of being silently attributed to a tier.
+
+## Session targets and supplies
+
+**Progress → Session target**, or `/arachne goals`, sets one optional target: counted kills, active time, or net profit. Time input uses **HH:MM:SS**. Save applies the draft; Cancel discards it. Completion can print one local message per selected goal and session. Loading an already completed goal does not replay the message. Targets always use the current session, regardless of the display's Session/Total choice.
+
+**Progress → Supplies**, or `/arachne supplies`, shows carried Crystals and Callings. A rough Crystal stock estimate becomes available after three of your own recorded Crystal placements and one active minute in the current session. It excludes storage and does not infer another player's costs. `/arachne progress` opens the full Progress hub.

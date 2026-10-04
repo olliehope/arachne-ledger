@@ -3,15 +3,16 @@ package dev.arachneledger.ui.screen;
 import dev.arachneledger.client.ArachneLedger;
 import dev.arachneledger.config.Config;
 import dev.arachneledger.ledger.Analytics;
-import dev.arachneledger.ledger.FightRecord;
 import dev.arachneledger.ledger.Ledger;
 import dev.arachneledger.skyblock.Catalog;
 import dev.arachneledger.tracking.Tracker;
+import dev.arachneledger.ui.DashboardData;
 import dev.arachneledger.ui.FlatButton;
 import dev.arachneledger.ui.Format;
 import dev.arachneledger.ui.Graph;
 import dev.arachneledger.ui.GraphData;
 import dev.arachneledger.ui.Hud;
+import dev.arachneledger.ui.Tooltips;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -30,6 +31,13 @@ public final class DashboardScreen extends Screen {
     private int panelX, panelY, panelWidth, panelHeight, scrollOffset;
     private long resetConfirmationUntil, noteExpiresAt;
     private String note = "";
+    private final DashboardData dashboard = new DashboardData();
+    private DashboardData.Snapshot displayed;
+    private GraphData.Snapshot displayedGraph;
+    private int graphTop;
+    private DashboardData.Snapshot rowsSnapshot;
+    private long rowsMinimumDamage = -1;
+    private List<Row> cachedOverview = List.of(), cachedDrops = List.of();
 
     private record Row(
             String label, String value, int labelColor, int valueColor, String explanation) {}
@@ -51,8 +59,7 @@ public final class DashboardScreen extends Screen {
     }
 
     private void scope(boolean total) {
-        tracker.config.total = total;
-        tracker.saveConfig();
+        ScopeSelection.select(tracker, total);
         scrollOffset = 0;
         rebuildWidgets();
     }
@@ -101,8 +108,9 @@ public final class DashboardScreen extends Screen {
         boolean graphView =
                 !tracker.config.dashboardFights && tracker.config.view == Config.View.GRAPH;
         drawHeader(graphics, graphView);
-        var stats = tracker.ledger.stats(tracker.config.total);
-        var analytics = tracker.ledger.analytics(tracker.config.total);
+        displayed = dashboard.get(tracker.ledger, tracker.config.total);
+        var stats = displayed.stats();
+        var analytics = displayed.analytics();
         String projectionTip =
                 "Current-session pace from the last "
                         + Hud.shortTime(analytics.windowMillis())
@@ -112,9 +120,11 @@ public final class DashboardScreen extends Screen {
                         ? GraphData.build(
                                 tracker.ledger, tracker.config.total, tracker.config.graph)
                         : null;
+        displayedGraph = graph;
         int top;
         if (graphView) {
             top = drawGraphSummary(graphics, graph, mouseX, mouseY);
+            graphTop = top;
         } else {
             top = drawProfitSummary(graphics, stats, analytics, projectionTip, mouseX, mouseY);
         }
@@ -137,13 +147,7 @@ public final class DashboardScreen extends Screen {
         } else if (tracker.config.view == Config.View.DETAILED) {
             drawDrops(graphics, stats, analytics, top, bottom, mouseX, mouseY);
         } else {
-            drawRows(
-                    graphics,
-                    overviewRows(stats, analytics, projectionTip),
-                    top,
-                    bottom,
-                    mouseX,
-                    mouseY);
+            drawRows(graphics, overviewRows(displayed, projectionTip), top, bottom, mouseX, mouseY);
         }
         drawFooter(graphics, stats, analytics, graphView, graph, mouseX, mouseY);
         for (var child : children()) {
@@ -155,35 +159,35 @@ public final class DashboardScreen extends Screen {
 
     private void addScopeButtons() {
         button(
-                panelX + panelWidth - 122,
+                panelX + panelWidth - 120,
                 panelY + 8,
-                39,
+                62,
+                18,
+                "Session",
+                !tracker.config.total,
+                "Show this session's totals.",
+                () -> scope(false));
+        button(
+                panelX + panelWidth - 54,
+                panelY + 8,
+                42,
                 18,
                 "Total",
                 tracker.config.total,
                 "Show lifetime totals.",
                 () -> scope(true));
-        button(
-                panelX + panelWidth - 80,
-                panelY + 8,
-                68,
-                18,
-                "This session",
-                !tracker.config.total,
-                "Show this session's totals.",
-                () -> scope(false));
     }
 
     private void addDashboardTabs() {
         String[] tabs = {"Overview", "Drops", "Graph", "Fights"};
-        int[] sizes = {66, 48, 48, 50};
         int buttonX = panelX + 8;
         for (int i = 0; i < tabs.length; i++) {
             int selectedTab = i;
+            int tabWidth = font.width(tabs[i]) + 6;
             button(
                     buttonX,
                     panelY + 36,
-                    sizes[i],
+                    tabWidth,
                     18,
                     tabs[i],
                     i == 3
@@ -191,8 +195,17 @@ public final class DashboardScreen extends Screen {
                             : !tracker.config.dashboardFights && tracker.config.view.ordinal() == i,
                     "Change dashboard view.",
                     () -> selectDashboardTab(selectedTab));
-            buttonX += sizes[i] + 4;
+            buttonX += tabWidth + 2;
         }
+        button(
+                buttonX,
+                panelY + 36,
+                font.width("Progress") + 8,
+                18,
+                "Progress",
+                false,
+                "Achievements, RNG history, T1/T2 comparison, goals and session recaps.",
+                () -> minecraft.setScreen(new ProgressScreen(this)));
         if (!tracker.config.dashboardFights && tracker.config.view == Config.View.GRAPH) {
             button(
                     panelX + panelWidth - 60,
@@ -209,11 +222,17 @@ public final class DashboardScreen extends Screen {
                     panelY + 36,
                     52,
                     18,
-                    "Journal",
+                    "Copy",
                     false,
-                    "Achievements, session recaps, personal records and tracking diagnostics.",
-                    () -> minecraft.setScreen(new JournalScreen(this)));
+                    "Copy the selected scope's profit, profit without RNG, loot, costs, kills and active time.",
+                    this::copyRecap);
         }
+    }
+
+    private void copyRecap() {
+        DashboardData.Snapshot current = dashboard.get(tracker.ledger, tracker.config.total);
+        minecraft.keyboardHandler.setClipboard(DashboardData.recap(current, tracker.config.total));
+        setNote((tracker.config.total ? "Total" : "Session") + " recap copied.");
     }
 
     private void selectDashboardTab(int selectedTab) {
@@ -330,6 +349,16 @@ public final class DashboardScreen extends Screen {
             int bottom,
             int mouseX,
             int mouseY) {
+        refreshRows(displayed, "");
+        List<Row> rows = cachedDrops;
+        if (rows.isEmpty()) {
+            graphics.text(font, "No drops recorded yet.", panelX + 12, top, Graph.MUTED, true);
+        } else {
+            drawRows(graphics, rows, top, bottom, mouseX, mouseY);
+        }
+    }
+
+    private List<Row> dropRows(Ledger.Stats stats, Analytics.Snapshot analytics) {
         List<Row> rows = new ArrayList<>();
         for (String id : Hud.sortedLoot(analytics, stats)) {
             double value = analytics.lootRevenue().getOrDefault(id, 0.0);
@@ -349,16 +378,51 @@ public final class DashboardScreen extends Screen {
                                     + Format.coins(value)
                                     + " recorded coins."));
         }
-        if (rows.isEmpty()) {
-            graphics.text(font, "No drops recorded yet.", panelX + 12, top, Graph.MUTED, true);
-        } else {
-            drawRows(graphics, rows, top, bottom, mouseX, mouseY);
+        return List.copyOf(rows);
+    }
+
+    private void refreshRows(DashboardData.Snapshot snapshot, String projectionTip) {
+        if (rowsSnapshot != snapshot || rowsMinimumDamage != tracker.config.minimumDamage) {
+            cachedOverview = buildOverview(snapshot, projectionTip);
+            cachedDrops = dropRows(snapshot.stats(), snapshot.analytics());
+            rowsSnapshot = snapshot;
+            rowsMinimumDamage = tracker.config.minimumDamage;
         }
     }
 
-    private List<Row> overviewRows(
-            Ledger.Stats stats, Analytics.Snapshot analytics, String projectionTip) {
+    private List<Row> overviewRows(DashboardData.Snapshot snapshot, String projectionTip) {
+        refreshRows(snapshot, projectionTip);
+        return cachedOverview;
+    }
+
+    private List<Row> buildOverview(DashboardData.Snapshot snapshot, String projectionTip) {
+        Ledger.Stats stats = snapshot.stats();
+        Analytics.Snapshot analytics = snapshot.analytics();
         List<Row> rows = new ArrayList<>();
+        DashboardData.Fight last = snapshot.lastFinished();
+        if (last != null) {
+            rows.add(
+                    row(
+                            "Last fight #"
+                                    + last.id()
+                                    + " · "
+                                    + (last.duration() >= 0
+                                            ? Format.time(last.duration())
+                                            : "unknown time"),
+                            Format.coins(last.profit()) + " coins",
+                            last.profit() >= 0 ? Graph.GREEN : Graph.RED,
+                            "Recorded fight income minus costs. Click for the full breakdown."));
+            rows.add(
+                    row(
+                            "Result",
+                            (last.damage() >= 0
+                                            ? String.format(Locale.ROOT, "%,d", last.damage())
+                                                    + " damage · "
+                                            : "")
+                                    + last.reason(),
+                            Graph.MUTED,
+                            last.reason() + ". Click for the full breakdown."));
+        }
         rows.add(
                 row(
                         "Rewards + other income",
@@ -428,26 +492,11 @@ public final class DashboardScreen extends Screen {
                         "Runs from Arachne's spawn until 60 seconds after death. Another spawn resumes it. Pauses and time outside the arena are excluded."));
         rows.add(
                 row(
-                        "Projection sample",
-                        Hud.shortTime(analytics.windowMillis())
-                                + " / "
-                                + analytics.windowKills()
-                                + " kills",
-                        Graph.MUTED,
-                        projectionTip));
-        rows.add(
-                row(
-                        "Next crystal",
-                        Format.coins(tracker.config.effectiveCrystalCost()) + " coins",
-                        Graph.RED,
-                        "Current crystal cost for future placements."));
-        rows.add(
-                row(
-                        "Unpriced drops",
-                        Long.toString(stats.unpriced()),
-                        stats.unpriced() > 0 ? Hud.TITLE : Graph.MUTED,
-                        "Set prices and use Reprice session to value these drops."));
-        return rows;
+                        "Profit without RNG",
+                        Format.coins(snapshot.profit().ordinaryNet()) + " coins",
+                        snapshot.profit().ordinaryNet() >= 0 ? Graph.GREEN : Graph.RED,
+                        "Net profit with pet and Fang value removed; all summoning costs are retained."));
+        return List.copyOf(rows);
     }
 
     private void drawHeader(GuiGraphicsExtractor graphics, boolean graphView) {
@@ -510,7 +559,7 @@ public final class DashboardScreen extends Screen {
                 && mouseX < panelX + panelWidth - 12
                 && mouseY >= panelY + panelHeight - 44
                 && mouseY < panelY + panelHeight - 31) {
-            graphics.setTooltipForNextFrame(Component.literal(footer), mouseX, mouseY);
+            Tooltips.show(graphics, font, footer, mouseX, mouseY);
         }
         graphics.horizontalLine(
                 panelX + 12, panelX + panelWidth - 12, panelY + panelHeight - 29, 0xFF333333);
@@ -615,7 +664,7 @@ public final class DashboardScreen extends Screen {
 
     private void drawFights(
             GuiGraphicsExtractor graphics, int top, int bottom, int mouseX, int mouseY) {
-        var fights = tracker.ledger.recentFights(tracker.config.total);
+        var fights = displayed.fights();
         if (fights.isEmpty()) {
             graphics.text(font, "No fights recorded yet.", panelX + 12, top, Graph.MUTED, true);
             return;
@@ -624,8 +673,7 @@ public final class DashboardScreen extends Screen {
         scrollOffset =
                 Math.max(0, Math.min(scrollOffset, Math.max(0, fights.size() - visibleRows)));
         for (int i = scrollOffset; i < Math.min(fights.size(), scrollOffset + visibleRows); i++) {
-            FightRecord fight = fights.get(i);
-            var stats = tracker.ledger.fightStats(fight.id);
+            DashboardData.Fight fight = fights.get(i);
             int rowY = top + (i - scrollOffset) * 25;
             boolean hovered =
                     mouseX >= panelX + 10
@@ -636,9 +684,15 @@ public final class DashboardScreen extends Screen {
                 graphics.fill(
                         panelX + 10, rowY - 2, panelX + panelWidth - 10, rowY + 22, 0x30666666);
             }
-            String value = Format.coins(stats.profit()) + " coins";
+            String value = Format.coins(fight.profit()) + " coins";
             int valueX = panelX + panelWidth - 16 - font.width(value);
-            String label = "Fight #" + fight.id + " · " + FightDetailsScreen.duration(fight);
+            String label =
+                    "Fight #"
+                            + fight.id()
+                            + " · "
+                            + (fight.duration() >= 0
+                                    ? Format.time(fight.duration())
+                                    : "unknown time");
             graphics.text(
                     font,
                     font.plainSubstrByWidth(label, Math.max(25, valueX - panelX - 24)),
@@ -647,12 +701,12 @@ public final class DashboardScreen extends Screen {
                     Hud.TITLE,
                     true);
             graphics.text(
-                    font, value, valueX, rowY, stats.profit() >= 0 ? Graph.GREEN : Graph.RED, true);
+                    font, value, valueX, rowY, fight.profit() >= 0 ? Graph.GREEN : Graph.RED, true);
             String detail =
-                    fight.reason(stats.kills() > 0)
-                            + (fight.damage >= 0
+                    fight.reason()
+                            + (fight.damage() >= 0
                                     ? " · "
-                                            + String.format(Locale.ROOT, "%,d", fight.damage)
+                                            + String.format(Locale.ROOT, "%,d", fight.damage())
                                             + " damage"
                                     : "");
             graphics.text(
@@ -663,12 +717,10 @@ public final class DashboardScreen extends Screen {
                     Graph.MUTED,
                     true);
             if (hovered) {
-                graphics.setTooltipForNextFrame(
-                        Component.literal(
-                                detail
-                                        + "\n"
-                                        + FightDetailsScreen.date(fight)
-                                        + "\nClick for drops, costs and corrections."),
+                Tooltips.show(
+                        graphics,
+                        font,
+                        detail + "\n" + "Click for drops, costs and corrections.",
                         mouseX,
                         mouseY);
             }
@@ -695,13 +747,47 @@ public final class DashboardScreen extends Screen {
     @Override
     public boolean mouseClicked(
             net.minecraft.client.input.MouseButtonEvent event, boolean doubleClick) {
+        if (event.button() == 0
+                && !tracker.config.dashboardFights
+                && tracker.config.view == Config.View.GRAPH
+                && displayedGraph != null) {
+            long fightId =
+                    Graph.rareFightAt(
+                            displayedGraph,
+                            tracker.config.graph,
+                            panelX + 10,
+                            graphTop - 4,
+                            panelWidth - 20,
+                            Math.max(24, panelY + panelHeight - 47 - graphTop + 4),
+                            (int) event.x(),
+                            (int) event.y(),
+                            true);
+            if (fightId > 0
+                    && tracker.ledger.fights.stream().anyMatch(fight -> fight.id == fightId)) {
+                minecraft.setScreen(new FightDetailsScreen(this, fightId));
+                return true;
+            }
+        }
+        if (event.button() == 0
+                && !tracker.config.dashboardFights
+                && tracker.config.view == Config.View.COMPACT
+                && displayed != null
+                && displayed.lastFinished() != null
+                && scrollOffset < 2
+                && event.x() >= panelX + 10
+                && event.x() < panelX + panelWidth - 10
+                && event.y() >= panelY + 120
+                && event.y() < panelY + 121 + (2 - scrollOffset) * 13) {
+            minecraft.setScreen(new FightDetailsScreen(this, displayed.lastFinished().id()));
+            return true;
+        }
         if (tracker.config.dashboardFights
                 && event.button() == 0
                 && event.x() >= panelX + 10
                 && event.x() < panelX + panelWidth - 10
                 && event.y() >= panelY + 119
                 && event.y() < panelY + panelHeight - 52) {
-            var fights = tracker.ledger.recentFights(tracker.config.total);
+            var fights = dashboard.get(tracker.ledger, tracker.config.total).fights();
             int top = panelY + 121,
                     visibleRows = Math.max(1, (panelY + panelHeight - 52 - top) / 25);
             scrollOffset =
@@ -713,7 +799,7 @@ public final class DashboardScreen extends Screen {
                     && scrollOffset + row < fights.size()
                     && event.y() < top + row * 25 + 22) {
                 minecraft.setScreen(
-                        new FightDetailsScreen(this, fights.get(scrollOffset + row).id));
+                        new FightDetailsScreen(this, fights.get(scrollOffset + row).id()));
                 return true;
             }
         }
@@ -746,7 +832,7 @@ public final class DashboardScreen extends Screen {
                 && mouseX < panelX + panelWidth - 12
                 && mouseY >= rowY - 1
                 && mouseY < rowY + 10) {
-            graphics.setTooltipForNextFrame(Component.literal(tip), mouseX, mouseY);
+            Tooltips.show(graphics, font, tip, mouseX, mouseY);
         }
     }
 
@@ -776,8 +862,7 @@ public final class DashboardScreen extends Screen {
                     && mouseX < panelX + panelWidth - 10
                     && mouseY >= rowY - 1
                     && mouseY < rowY + 11) {
-                graphics.setTooltipForNextFrame(
-                        Component.literal(row.explanation()), mouseX, mouseY);
+                Tooltips.show(graphics, font, row.explanation(), mouseX, mouseY);
             }
         }
         graphics.disableScissor();

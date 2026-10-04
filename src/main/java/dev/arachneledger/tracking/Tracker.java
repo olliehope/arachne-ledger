@@ -67,6 +67,8 @@ public final class Tracker {
     private long rewardWindowUntil;
     private long lastPlacementAt;
     private String lastPlacementMessage = "";
+    private long lastSummonAt;
+    private String lastSummonMessage = "";
 
     private final FightReports reports = new FightReports();
     private final TrackingClock clock = new TrackingClock();
@@ -81,10 +83,14 @@ public final class Tracker {
     private final Deque<SessionSummary.Snapshot> sessionNotices = new ArrayDeque<>();
     private long purseMenuCooldownUntil;
     private boolean purseMenuOpen;
-    private Ledger rngCachedLedger;
-    private long rngCachedRevision = -1, rngCachedActiveMillis = -1;
-    private boolean rngCachedTotal;
-    private RngSince.Snapshot rngCached;
+    private final RngCache sessionRngCache = new RngCache();
+    private final RngCache totalRngCache = new RngCache();
+
+    private static final class RngCache {
+        Ledger ledger;
+        long revision = -1, activeMillis = -1;
+        RngSince.Snapshot snapshot;
+    }
 
     public record KillSummary(
             long fightMillis,
@@ -193,6 +199,8 @@ public final class Tracker {
         clearFightContext();
         lastPlacementAt = 0;
         lastPlacementMessage = "";
+        lastSummonAt = 0;
+        lastSummonMessage = "";
         inArena = false;
         inSkyblock = false;
         lootDeduplicator.reset();
@@ -215,6 +223,8 @@ public final class Tracker {
         rng.clear();
         pedestal.clear();
         farmingEvents.clear();
+        lastSummonAt = 0;
+        lastSummonMessage = "";
     }
 
     public void updateLocation(
@@ -241,6 +251,9 @@ public final class Tracker {
             lootDeduplicator.reset();
         }
         inArena = trackingAllowed;
+        if (ready() && inArena && area.active(now, false)) {
+            ledgerDirty |= ledger.visitSanctuary(now);
+        }
         detectionReason = area.reason(now, config.manualTracking);
         return inArena;
     }
@@ -252,7 +265,7 @@ public final class Tracker {
         inArena = insideArena;
         advanceClock(now, insideArena);
         handlePauseTransition();
-        fights.expireDamageSummary(now);
+        fights.expireDamageSummary(ledger, now);
         ledgerDirty |= fights.consumeChanges();
         flushReports(now);
         if (refreshAchievements(now, achievementAlertsEnabled())) save();
@@ -407,7 +420,25 @@ public final class Tracker {
     private void observeSummoningCue(String message, long now) {
         // Everyone's completed summon can awaken the boss; only own placements are charged.
         Messages.Summon summon = Messages.summon(message);
-        if (fights.activeFight == null && pedestal.begin(summon, now, config.farming)) {
+        if (summon == null
+                || (message.equals(lastSummonMessage)
+                        && now >= lastSummonAt
+                        && now - lastSummonAt < PLACEMENT_DUPLICATE_WINDOW_MILLIS)) return;
+        boolean recovering = fights.activeFight != null;
+        if (fights.activeFight != null) {
+            long spawned = fights.activeFight.history.spawned;
+            if (spawned > 0 && now >= spawned && now - spawned < PLACEMENT_DUPLICATE_WINDOW_MILLIS)
+                return;
+            // Recovered activity can coexist with an unconfirmed countdown. A new ritual
+            // must replace both rather than remain blocked until the old estimate expires.
+            pedestal.clear();
+        }
+        if (pedestal.begin(summon, now, config.farming)) {
+            lastSummonAt = now;
+            lastSummonMessage = message;
+            fights.observeSummon(ledger, summon, now);
+            if (recovering) rewardWindowUntil = 0;
+            pickupWindowUntil = now + PICKUP_WINDOW_MILLIS;
             clock.summon(now);
             diagnostics.record(
                     now,
@@ -469,7 +500,7 @@ public final class Tracker {
     /** Rendering is an estimate only: it cannot create a spawn, active time, or a kill. */
     public PedestalTimer.View pedestalTimer(long now) {
         if (!ready() || config.paused || !inArena) return null;
-        PedestalTimer.View countdown = config.farming.pedestalTimer ? pedestal.view(now) : null;
+        PedestalTimer.View countdown = config.farming.pedestalTimer ? ritualTimer(now) : null;
         if (countdown != null) return countdown;
         if (config.farming.pedestalFightTime
                 && fights.activeFight != null
@@ -483,6 +514,11 @@ public final class Tracker {
                     true);
         }
         return null;
+    }
+
+    /** The HUD can show a ritual even when the world-space pedestal label is disabled. */
+    public PedestalTimer.View ritualTimer(long now) {
+        return ready() && !config.paused && inArena ? pedestal.view(now) : null;
     }
 
     public void observeRitualParticles(long now) {
@@ -506,22 +542,21 @@ public final class Tracker {
      * history.
      */
     public RngSince.Snapshot rngSince(boolean total) {
-        if (rngCached == null
-                || rngCachedLedger != ledger
-                || rngCachedRevision != ledger.revision()
-                || rngCachedTotal != total) {
-            rngCached = RngSince.calculate(ledger, total);
-            rngCachedLedger = ledger;
-            rngCachedRevision = ledger.revision();
-            rngCachedTotal = total;
-            rngCachedActiveMillis = ledger.activeMillis;
-        } else if (rngCachedActiveMillis != ledger.activeMillis) {
-            rngCached =
+        RngCache cache = total ? totalRngCache : sessionRngCache;
+        if (cache.snapshot == null
+                || cache.ledger != ledger
+                || cache.revision != ledger.revision()) {
+            cache.snapshot = RngSince.calculate(ledger, total);
+            cache.ledger = ledger;
+            cache.revision = ledger.revision();
+            cache.activeMillis = ledger.activeMillis;
+        } else if (cache.activeMillis != ledger.activeMillis) {
+            cache.snapshot =
                     RngSince.advanceClock(
-                            rngCached, ledger.activeMillis, total ? 0 : ledger.sessionMillis);
-            rngCachedActiveMillis = ledger.activeMillis;
+                            cache.snapshot, ledger.activeMillis, total ? 0 : ledger.sessionMillis);
+            cache.activeMillis = ledger.activeMillis;
         }
-        return rngCached;
+        return cache.snapshot;
     }
 
     /** Observe every tick, even when a short-lived menu falls between sidebar snapshots. */
@@ -812,6 +847,12 @@ public final class Tracker {
         } catch (Exception exception) {
             fail(exception);
         }
+    }
+
+    /** Persist nonfinancial journal state without invalidating cached earnings or graph history. */
+    public void saveJournalMetadata() {
+        ledgerDirty = true;
+        save();
     }
 
     public void save() {
