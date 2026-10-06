@@ -8,13 +8,15 @@ Open **Settings → HUD & layouts** for five tabs:
 
 - **Rows:** independently show or hide the title, total profit, profit/hour, projected/hour, profit without RNG, without RNG/hour, tracking status, loot items and their values, rare-drop rates, Scavenger coins, Crystal costs, Calling costs, kills, kills/hour, active time, scope, and unpriced warning. The two rows without RNG exclude Tarantula Pets and Arachne Fangs while keeping Scavenger coins and every recorded cost. Rates beside rare drops use observed rewards per counted kill; ordinary loot has no RNG percentage.
 - **Items:** choose 0–8 loot rows, sort by recorded value, quantity, or name, and show or hide individual items. Hidden items still contribute to totals and profit.
-- **Layout:** choose Text or Graph, a text layout, visibility, and background. **Move / resize** opens the draggable preview; scroll over it to resize. `/arachne hud edit` also opens the editor.
+- **Display:** choose Text or Graph, a text layout, and Text only, Soft panel or Border presentation. **Preview, move & resize** opens the draggable draft preview; scroll over it to resize. `/arachne hud edit` also opens the editor.
 - **Order:** move rows **Up** or **Down** within Rewards or Summary. Loot items move as one block; individual item order still comes from **Items → Sort loot by**. Hidden rows retain their position. **Reset row order** restores the default order without changing visibility or item filters.
 - **Saved:** create up to 12 named HUD presets. Each retains rows, item filters, layout, position, scale, visibility, and background. Adding, applying, and deleting presets affect the draft until **Save**. Graph series remain in their own settings.
 
 HUD options and the move/resize editor both use **Save** and **Cancel**. Options opened inside the editor update its draft; save the editor to apply everything. The optional **Spawn countdown** row works independently of the world label. Click a revealed achievement in the achievement book to pin or unpin its progress.
 
 **Loot ledger** is the default for new settings, with aligned loot quantities and values followed by the money summary, Scavenger, kills, and active time. **Minimal** shows the key money stats and tracking status. **Classic** restores a fuller item-and-stat list. **Split** separates the item list from the summary. Updating preserves your selected layout and individual rows.
+
+Presentation style is independent of those layouts: **Text only** keeps the familiar transparent text overlay, **Soft panel** adds a subtle dark background, and **Border** adds a thin outline. Old configurations retain their existing background until you choose a style. Applying a content preset keeps the selected presentation; named presets retain it.
 
 Changing **Text layout** rearranges your existing selections. Minimal shows Summary before Rewards; Classic and Loot ledger show Rewards before Summary; Split keeps Rewards on the left and Summary on the right. Custom order is retained inside each group. **Apply preset** deliberately resets row toggles, item exclusions, sorting, row order, and the loot-row limit to that preset, then selects the text HUD. Position and scale are kept. Graph rows and lines use the separate **Graph** settings.
 
@@ -61,11 +63,11 @@ The default minimum damage is **10,000**. `/arachne mindamage <damage>` also cha
 
 Open **Settings → Timers & sounds** for three tabs. **Save** applies every tab together; **Cancel** discards the draft. All cues are local to your client.
 
-- **Pedestal:** toggle the estimated spawn countdown, elapsed fight time, visibility through walls, and adaptive Crystal timing. Adjust the Crystal and Calling fallback delays from 10–60 seconds, label size from 50–200%, and label range from 16–128 blocks.
+- **Pedestal:** toggle the estimated spawn countdown, elapsed fight time, visibility through walls, and learned spawn timing. Inspect or reset the separate timing histories. Adjust the Crystal and Calling fallback delays from 10–60 seconds, label size from 50–200%, and label range from 16–128 blocks.
 - **Alerts:** choose spawn titles and sounds, rare-drop sounds, and achievement titles and sounds separately. Existing achievements are not replayed after an update.
 - **Chat:** toggle rare-drop chat and compact kill summaries. Compact summaries retain the full rewards, costs, damage, and Scavenger details on hover. Enable kill chat itself under **Tracking & notifications**.
 
-The pedestal countdown begins on a detected Crystal or completed **4/4** Calling placement. Defaults are **40 seconds** for a Crystal and **19 seconds** for a Calling. Adaptive Crystal timing samples the first nearby dust burst after three seconds and estimates another **21 or 37 seconds**, usually about **24 or 40 seconds** from placement. Without a usable sample, it keeps your fallback. Actual spawn chat ends the estimate; reaching zero never counts a spawn or starts active fight time.
+The pedestal countdown begins on a detected Crystal or completed **4/4** Calling placement. Defaults are **40 seconds** for a Crystal and **19 seconds** for a Calling. Learned estimates use the median of up to nine recent confirmed placement-to-spawn observations for that tier, after at least three samples. Turn learning off to display the configured fallbacks. **Timing samples → Reset** clears observations only when you Save. Actual spawn chat ends the estimate; reaching zero never counts a spawn or starts active fight time.
 
 Rare-drop chat uses the item's rarity color and keeps the recorded value hidden when it is unknown or **Rare drop value** is off. Its kill and active-time interval appears only when the drop belongs to qualifying recorded history. Achievement chat prints `[Arachne] Achievement Unlocked >> <title>`; hover for the objective or click to open the achievement book. See [Farming cues and RNG history](farming.md) for details.
 

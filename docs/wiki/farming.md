@@ -6,11 +6,13 @@ The profit HUD keeps the totals visible while the pedestal label and local notif
 
 A detected Arachne Crystal or completed **4/4** Calling placement starts an estimated countdown above the pedestal. Repeated placement relays do not restart it. The default fallback is **40 seconds** for a Crystal and **19 seconds** for a Calling; both are adjustable from 10–60 seconds.
 
-With **Adaptive Crystal timing** on, the mod samples the first nearby ritual dust burst after three seconds and estimates another **21 or 37 seconds** from that burst, usually about **24 or 40 seconds** from placement. If particles were not observed, it keeps the configured fallback. The timer remains an estimate rather than a precise server clock.
+With **Learned spawn timing** on, the mod records the interval between a completed placement and a confirmed spawn. Crystal and Calling observations are kept separately, with up to nine recent samples per tier. After three confirmed observations, the countdown uses their median; until then, it uses your fallback. The label's detail shows the sample count and observed range. Quick and normal rituals can vary, so the countdown remains an estimate rather than a precise server clock.
 
-Delayed particles are sampled over a short burst window. Weak or fragmented observations retain the configured fallback. A fresh ritual can recover the countdown after a missed death message; it also keeps the previous fight's late reward window open after a normal death.
+Particle density no longer changes the estimate. Countdown and fight labels use a monotonic clock so a system clock adjustment cannot move them backwards. A fresh ritual can recover the countdown after a missed death message; it also keeps the previous fight's late reward window open after a normal death.
 
 The `~` marks an estimate. At zero, the label waits for the actual spawn message. The countdown does not record a spawn, count a kill, or start the fight clock. A confirmed spawn ends the estimate; **Fight duration** can then show elapsed fight time at the pedestal.
+
+**Timing samples → Reset** clears the learned history when you Save. Cancel keeps it. Observations continue to accumulate while learned estimates are switched off. Saving other options preserves samples learned while the settings page was open. Only confirmed placement/spawn pairs contribute; relayed dialogue, late joins and timer expiry do not create samples.
 
 Use **Through walls** to choose block visibility, **Label scale** for 50–200% size, and **Label range** for a 16–128 block draw distance. The regular profit HUD has separate position and scale controls.
 

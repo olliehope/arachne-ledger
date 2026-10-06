@@ -22,7 +22,6 @@ import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
-import net.minecraft.world.entity.decoration.ArmorStand;
 
 import org.lwjgl.glfw.GLFW;
 
@@ -33,7 +32,6 @@ import org.lwjgl.glfw.GLFW;
  */
 public final class ArachneLedger implements ClientModInitializer {
     private static final int CONTEXT_REFRESH_TICKS = 10;
-    private static final int REWARD_SCAN_RADIUS = 48;
 
     /** Shared with render hooks and the pickup mixin; created before those hooks register. */
     public static Tracker tracker;
@@ -43,7 +41,10 @@ public final class ArachneLedger implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        tracker = new Tracker(FabricLoader.getInstance().getConfigDir().resolve("arachneledger"));
+        tracker =
+                new Tracker(
+                        FabricLoader.getInstance().getConfigDir().resolve("arachneledger"),
+                        System::nanoTime);
         var category =
                 KeyMapping.Category.register(
                         Identifier.fromNamespaceAndPath("arachneledger", "controls"));
@@ -110,7 +111,7 @@ public final class ArachneLedger implements ClientModInitializer {
         }
         tracker.tick(now, tracker.refreshArea(now));
         updatePricesAndAlerts(client, now);
-        observeRewardLabels(client, now);
+        RewardLabelScanner.observe(client, tracker, now);
         ClientNotifications.publish(client, tracker);
         ClientGoalNotifications.publish(client, tracker);
         handleKeybindings(openDashboardKey, toggleScopeKey, cycleHudViewKey);
@@ -138,21 +139,6 @@ public final class ArachneLedger implements ClientModInitializer {
         }
         while (cycleHudViewKey.consumeClick()) {
             tracker.cycleView();
-        }
-    }
-
-    private static void observeRewardLabels(Minecraft client, long now) {
-        if (client.player == null || client.level == null || !tracker.acceptsStandLoot(now)) {
-            return;
-        }
-        for (ArmorStand stand :
-                client.level.getEntitiesOfClass(
-                        ArmorStand.class,
-                        client.player.getBoundingBox().inflate(REWARD_SCAN_RADIUS))) {
-            Component label = stand.getCustomName();
-            if (label != null) {
-                tracker.observeLootStand(stand.getUUID(), LootLabels.formatted(label), now);
-            }
         }
     }
 

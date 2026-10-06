@@ -26,6 +26,7 @@ public final class HudPresetChecks {
         config.hudPreferences.applyPreset(HudPreferences.Layout.SPLIT);
         config.hudPreferences.pinnedAchievement = "kill_first";
         config.hudPreferences.showCountdown = true;
+        config.hudPreferences.style = HudPreferences.Style.BORDER;
         config.hudPreferences.hiddenItems.add("STRING");
         config.hudPreferences.rowOrder =
                 HudRowOrder.move(config.hudPreferences.rowOrder, "profit", 1);
@@ -52,6 +53,10 @@ public final class HudPresetChecks {
         yes(config.hudBackground && config.hudAlwaysShow, "Apply restores display context");
         same("kill_first", config.hudPreferences.pinnedAchievement, "Apply restores goal");
         yes(config.hudPreferences.showCountdown, "Apply restores HUD countdown");
+        same(
+                HudPreferences.Style.BORDER,
+                config.hudPreferences.style,
+                "Apply restores presentation style");
         config.hudPreferences.hiddenItems.clear();
         same(
                 List.of("STRING"),
@@ -64,6 +69,10 @@ public final class HudPresetChecks {
         Store.write(file, config);
         Config restored = Store.read(file, Config.class, Config::new, Config::validate);
         same("Farming", restored.hudPresets.getFirst().name, "Named presets survive JSON");
+        same(
+                HudPreferences.Style.BORDER,
+                restored.hudPresets.getFirst().preferences.style,
+                "Saved presentation style survives JSON");
         same(
                 "kill_first",
                 restored.hudPresets.getFirst().preferences.pinnedAchievement,

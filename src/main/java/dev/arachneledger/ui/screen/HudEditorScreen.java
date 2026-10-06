@@ -24,7 +24,8 @@ public final class HudEditorScreen extends Screen {
     private boolean dragging;
     private double dragOffsetX, dragOffsetY;
     private int toolbarX, toolbarY, toolbarWidth;
-    private FlatButton hudOptions, graphOptions;
+    private FlatButton hudOptions, cancel;
+    private String resizeHint;
 
     public HudEditorScreen(Screen parent) {
         this(parent, ArachneLedger.tracker.config);
@@ -43,6 +44,7 @@ public final class HudEditorScreen extends Screen {
         toolbarWidth = Math.min(440, width - 12);
         toolbarX = (width - toolbarWidth) / 2;
         toolbarY = height - 52;
+        resizeHint = Math.round(draft.hudScale * 100) + "% · drag to move · scroll to resize";
         int buttonWidth = (toolbarWidth - 28) / 4;
         button(
                 0,
@@ -78,10 +80,12 @@ public final class HudEditorScreen extends Screen {
                 3,
                 0,
                 buttonWidth,
-                draft.hudBackground ? "Background" : "Text only",
-                "Toggle a subtle black background behind the overlay.",
+                draft.hudPreferences.resolvedStyle(draft.hudBackground).label(),
+                "Cycle Text only, Soft panel and Border without changing your rows.",
                 () -> {
-                    draft.hudBackground = !draft.hudBackground;
+                    draft.hudPreferences.cycleStyle(draft.hudBackground);
+                    draft.hudBackground =
+                            draft.hudPreferences.style != HudPreferences.Style.TEXT_ONLY;
                     changed();
                 });
         button(
@@ -124,7 +128,7 @@ public final class HudEditorScreen extends Screen {
         hudOptions.setTooltip(
                 Tooltip.create(Component.literal("Choose visible rows, items and text layouts.")));
         addRenderableWidget(hudOptions);
-        graphOptions =
+        cancel =
                 new FlatButton(
                         toolbarX + toolbarWidth - 92,
                         toolbarY - 22,
@@ -133,7 +137,7 @@ public final class HudEditorScreen extends Screen {
                         "Cancel",
                         false,
                         this::onClose);
-        addRenderableWidget(graphOptions);
+        addRenderableWidget(cancel);
     }
 
     private void button(
@@ -172,10 +176,9 @@ public final class HudEditorScreen extends Screen {
         extractBackground(graphics, mouseX, mouseY, delta);
         Hud.drawPanel(graphics, tracker, draft, Hud.bounds(draft, width, height), true);
         graphics.fill(toolbarX, toolbarY, toolbarX + toolbarWidth, height - 2, 0xDF101010);
-        String hint = "Drag to move · scroll to resize · " + Math.round(draft.hudScale * 100) + "%";
         graphics.text(
                 font,
-                font.plainSubstrByWidth(hint, toolbarWidth - 16),
+                font.plainSubstrByWidth(resizeHint, toolbarWidth - 16),
                 toolbarX + 8,
                 toolbarY + 3,
                 Graph.MUTED,
@@ -192,7 +195,7 @@ public final class HudEditorScreen extends Screen {
         if (hudOptions != null && hudOptions.isMouseOver(event.x(), event.y())) {
             return super.mouseClicked(event, doubleClick);
         }
-        if (graphOptions != null && graphOptions.isMouseOver(event.x(), event.y())) {
+        if (cancel != null && cancel.isMouseOver(event.x(), event.y())) {
             return super.mouseClicked(event, doubleClick);
         }
         if (event.y() >= toolbarY && event.x() >= toolbarX && event.x() < toolbarX + toolbarWidth) {

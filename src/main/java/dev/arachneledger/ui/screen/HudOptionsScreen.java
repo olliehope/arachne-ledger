@@ -27,7 +27,7 @@ public final class HudOptionsScreen extends SettingsListScreen {
 
     @Override
     protected void addHeaderControls() {
-        String[] labels = {"Rows", "Items", "Layout", "Order", "Saved"};
+        String[] labels = {"Rows", "Items", "Display", "Order", "Saved"};
         int tabWidth = Math.min(58, (panelWidth - 96) / labels.length);
         for (int index = 0; index < labels.length; index++) {
             int tab = index;
@@ -317,6 +317,19 @@ public final class HudOptionsScreen extends SettingsListScreen {
                             draft.hudView = Config.View.DETAILED;
                             changed();
                         }));
+        rows.add(
+                new Option(
+                        "Presentation style",
+                        preferences.resolvedStyle(draft.hudBackground).label(),
+                        false,
+                        tracker.error.isEmpty(),
+                        "Cycle Text only, Soft panel and Border. Style is independent of layout, rows and graph settings.",
+                        () -> {
+                            preferences.cycleStyle(draft.hudBackground);
+                            draft.hudBackground =
+                                    preferences.style != HudPreferences.Style.TEXT_ONLY;
+                            changed();
+                        }));
         for (HudPreferences.Layout preset :
                 new HudPreferences.Layout[] {
                     HudPreferences.Layout.LOOT,
@@ -332,7 +345,7 @@ public final class HudOptionsScreen extends SettingsListScreen {
                             tracker.error.isEmpty(),
                             "Apply "
                                     + preset.label()
-                                    + ": resets row toggles, row order, item filters, sorting and the loot-row limit. Position and scale are kept.",
+                                    + ": resets row toggles, row order, item filters, sorting and the loot-row limit. Position, size and presentation style are kept.",
                             () -> {
                                 preferences.applyPreset(preset);
                                 draft.hudView = Config.View.DETAILED;
@@ -351,18 +364,12 @@ public final class HudOptionsScreen extends SettingsListScreen {
                             changed();
                         }));
         rows.add(
-                toggle(
-                        "Background",
-                        draft.hudBackground,
-                        "Add a subtle background behind the overlay.",
-                        () -> draft.hudBackground = !draft.hudBackground));
-        rows.add(
                 new Option(
-                        "Move / resize",
-                        "Edit HUD",
+                        "Preview, move & resize",
+                        "Preview",
                         false,
                         true,
-                        "Drag the actual overlay and scroll to resize it.",
+                        "Preview your draft, drag the actual overlay and scroll to resize it. Save applies the draft; Cancel keeps your current HUD.",
                         () -> minecraft.setScreen(new HudEditorScreen(this, draft))));
         return rows;
     }

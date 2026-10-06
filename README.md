@@ -22,9 +22,9 @@ Arachne Ledger is a **Hypixel SkyBlock Arachne profit tracker** for **Minecraft 
 Features include:
 
 - session and lifetime earnings, coins per hour, and projected profit per hour;
-- customizable profit graphs, rare-drop markers, and named HUD presets;
+- customizable profit graphs, rare-drop markers, HUD styles, and named presets;
 - Bazaar instant-sell and sell-offer pricing, NPC and George pet prices, Ironman mode, and salvage values;
-- pedestal spawn countdowns, fight timers, and optional local titles and sounds;
+- learned pedestal spawn countdowns, fight timers, and optional local titles and sounds;
 - Tarantula Pet and Arachne Fang RNG alerts, observed drop rates, and dry-run history; and
 - 28 Arachne achievements, session targets, T1/T2 comparisons, recaps, and fight history.
 

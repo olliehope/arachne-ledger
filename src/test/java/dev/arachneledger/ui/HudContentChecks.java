@@ -1,12 +1,14 @@
 package dev.arachneledger.ui;
 
 import dev.arachneledger.config.Config;
+import dev.arachneledger.config.GraphPreferences;
 import dev.arachneledger.config.HudPreferences;
 import dev.arachneledger.config.HudRowOrder;
 import dev.arachneledger.config.Store;
 import dev.arachneledger.ledger.FightRecord;
 import dev.arachneledger.ledger.Ledger;
 import dev.arachneledger.skyblock.Catalog;
+import dev.arachneledger.skyblock.ItemRarity;
 import dev.arachneledger.skyblock.PurseCoins;
 import dev.arachneledger.tracking.Tracker;
 
@@ -115,6 +117,8 @@ public final class HudContentChecks {
         profitWithoutRng(root.resolve("without-rng"));
         lootLedgerContent(root.resolve("loot-ledger"));
         cacheAndPinnedGoal(root.resolve("cache"));
+        stylesAndRarity(root.resolve("style"));
+        graphSummaryCache(root.resolve("graph-cache"));
         System.out.println("PASS: " + checks + " HUD content, selection, scope and layout checks.");
     }
 
@@ -1008,5 +1012,153 @@ public final class HudContentChecks {
                 Format.coins(261_990),
                 row(HudContent.build(tracker), "regularHourly").value(),
                 "Lifetime ordinary rate uses both sessions' active time");
+    }
+
+    private static void stylesAndRarity(Path directory) {
+        Tracker tracker = fixture(directory);
+        tracker.config.hudPreferences.applyPreset(HudPreferences.Layout.LOOT);
+        tracker.config.hudPreferences.showProjectedPerHour = true;
+        tracker.config.hudPreferences.showStatus = true;
+        tracker.config.hudPreferences.showRegularProfit = true;
+        tracker.config.hudPreferences.pinnedAchievement = "kill_first";
+        var content = HudContent.build(tracker);
+        for (HudContent.Row row : content.metrics()) {
+            yes(!row.parts().isEmpty(), "Every compact summary has cached coloured segments");
+            yes(
+                    compactText(row).startsWith(row.label()),
+                    "Compact optional summary keeps its label: " + row.id());
+        }
+        same(
+                "Status: Waiting for spawn",
+                compactText(row(content, "status")),
+                "An optional tracking summary is visible in Loot ledger");
+        same(
+                "Projected / hour: 584.0k",
+                compactText(row(content, "projectedHourly")),
+                "An enabled projection retains its value in the compact summary");
+        int originalWidth = Hud.panelWidth(tracker.config);
+        int originalHeight = Hud.panelHeight(tracker.config);
+        List<Ledger.Entry> receipts = List.copyOf(tracker.ledger.entries);
+        var stats = tracker.ledger.stats(false);
+        for (HudPreferences.Style style : HudPreferences.Style.values()) {
+            tracker.config.hudPreferences.style = style;
+            same(
+                    content,
+                    HudContent.build(tracker),
+                    "Presentation leaves displayed financial content unchanged");
+            same(
+                    originalWidth,
+                    Hud.panelWidth(tracker.config),
+                    "Presentation keeps the width and drag geometry");
+            same(
+                    originalHeight,
+                    Hud.panelHeight(tracker.config),
+                    "Presentation keeps the height and drag geometry");
+            Hud.Bounds bounds = Hud.bounds(tracker.config, 320, 180);
+            yes(
+                    bounds.x() + bounds.width() <= 316 && bounds.y() + bounds.height() <= 176,
+                    "Every presentation fits a narrow GUI");
+        }
+        same(receipts, tracker.ledger.entries, "Changing style preserves recorded receipts");
+        same(stats, tracker.ledger.stats(false), "Changing style preserves accounting totals");
+        same(ItemRarity.Rarity.RARE, ItemRarity.of("SOUL_STRING"), "Soul String is Rare");
+        same(0xFF5555FF, Hud.itemColor("SOUL_STRING"), "Soul String uses its Rare display colour");
+        same(ItemRarity.Rarity.EPIC, ItemRarity.of("ARACK"), "Arack is Epic");
+        same(
+                ItemRarity.Rarity.EPIC,
+                ItemRarity.of("DARK_QUEENS_SOUL_DROP"),
+                "Dark Queen's Soul is Epic");
+        same(0xFFAA00AA, Hud.itemColor("ARACK"), "Arack uses the Epic display colour");
+        same(
+                0xFFAA00AA,
+                Hud.itemColor("DARK_QUEENS_SOUL_DROP"),
+                "Dark Queen's Soul uses the Epic display colour");
+        same(
+                0xFFFF55FF,
+                Hud.itemColor("ESSENCE_SPIDER"),
+                "Synthetic Spider Essence keeps its familiar pink");
+        for (String item : List.of("ARACHNE_FANG", "TARANTULA_EPIC", "TARANTULA_LEGENDARY")) {
+            same(
+                    Hud.itemColor(item),
+                    RngAlerts.rarityColor(item),
+                    "RNG title and loot list share rarity colour for " + item);
+        }
+        same(
+                0,
+                RngAlerts.rarityColor("ARACK"),
+                "Rarity lookup does not turn an ordinary drop into an RNG popup");
+        same(Hud.WHITE, Hud.itemColor(null), "Missing item metadata uses a safe default colour");
+    }
+
+    private static void graphSummaryCache(Path directory) {
+        Tracker tracker = fixture(directory);
+        GraphHudContent.Cache cache = new GraphHudContent.Cache();
+        var data = GraphData.build(tracker.ledger, false, tracker.config.graph);
+        var first = cache.get(tracker, data);
+        same(
+                "584.0k",
+                first.metrics().get(1).value(),
+                "Graph HUD shows net income per active hour");
+        same(
+                "Active time:",
+                first.status().getFirst().label(),
+                "Graph summaries retain their active time label");
+        same(
+                "00:01:00",
+                first.status().getFirst().value(),
+                "Graph summaries use hours, minutes and seconds");
+        for (int frame = 0; frame < 1_000; frame++) {
+            yes(
+                    first == cache.get(tracker, data),
+                    "Stable graph frames reuse cached labels without reformatting rates");
+        }
+        tracker.config.graph.showHourly = false;
+        var hidden = cache.get(tracker, data);
+        yes(hidden != first, "Visibility changes refresh labels even when chart data is stable");
+        same(2, hidden.metrics().size(), "Hiding hourly profit removes only that row");
+        tracker.config.graph.showScope = false;
+        same(
+                1,
+                cache.get(tracker, data).status().size(),
+                "Scope visibility updates without a financial mutation");
+        tracker.config.graph.showScope = true;
+        tracker.config.paused = true;
+        same(
+                "This session (paused)",
+                cache.get(tracker, data).status().getLast().value(),
+                "Pause changes the cached scope label immediately");
+        tracker.config.paused = false;
+        tracker.config.total = true;
+        var lifetime = GraphData.build(tracker.ledger, true, tracker.config.graph);
+        same(
+                "Total (waiting)",
+                cache.get(tracker, lifetime).status().getLast().value(),
+                "Total scope retains the current live tracking state");
+        tracker.config.graph.setVisible(GraphPreferences.Metric.LOOT, true);
+        tracker.config.graph.primary = GraphPreferences.Metric.LOOT;
+        var loot = GraphData.build(tracker.ledger, true, tracker.config.graph);
+        same(
+                "Total loot value:",
+                cache.get(tracker, loot).metrics().getFirst().label(),
+                "Changing primary series updates metric labels");
+        tracker.config.graph.setVisible(GraphPreferences.Metric.PROFIT, false);
+        tracker.config.graph.setVisible(GraphPreferences.Metric.LOOT, false);
+        var empty = GraphData.build(tracker.ledger, true, tracker.config.graph);
+        yes(
+                cache.get(tracker, empty).metrics().isEmpty(),
+                "An empty series never leaves stale financial labels");
+        same(
+                0,
+                GraphHudContent.metricRowCount(tracker.config.graph),
+                "Empty-series geometry reserves no invisible metric rows");
+        tracker.ledger.tick(1_000);
+        var nextSecond = GraphData.build(tracker.ledger, true, tracker.config.graph);
+        same(
+                "00:01:01",
+                cache.get(tracker, nextSecond).status().getFirst().value(),
+                "A new active second refreshes elapsed labels");
+        immutable(
+                () -> cache.get(tracker, nextSecond).status().clear(),
+                "Cached graph summaries are immutable");
     }
 }

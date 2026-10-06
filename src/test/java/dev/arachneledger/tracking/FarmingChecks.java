@@ -41,9 +41,11 @@ public final class FarmingChecks {
     public static void main(String[] args) throws Exception {
         parserAndPreferences();
         ritualEstimates();
+        timingHistoryAndMonotonicClock();
         trackerTimerLifecycle();
         localEventQueues();
         trackerNoticesAndDedup();
+        placementRelayOwnership();
         rngCache();
         staleFightRecoveryAndMetadata();
         System.out.println("PASS: " + checks + " farming cues, ritual estimates and cache checks.");
@@ -157,147 +159,272 @@ public final class FarmingChecks {
         yes(
                 timer.begin(Messages.Summon.CRYSTAL, BASE, preferences),
                 "Crystal starts its configured fallback");
-        eq(40, timer.view(BASE).seconds(), "Default Crystal estimate is forty seconds");
+        eq(40, timer.view(BASE).seconds(), "Default Crystal fallback remains forty seconds");
         var firstLabel = timer.view(BASE);
         var nextFrame = timer.view(BASE + 10);
         yes(
                 firstLabel.label() == nextFrame.label(),
-                "Repeated render requests within the displayed tenth reuse formatted text");
-        eq(39.99, nextFrame.seconds(), "Label reuse preserves exact countdown data");
-        yes(
-                !firstLabel.label().equals(timer.view(BASE + 100).label()),
-                "Visible tenths advance instead of freezing the countdown");
+                "Frames in the same visible tenth reuse formatted text");
+        eq(39.99, nextFrame.seconds(), "Cached text preserves exact countdown data");
+        yes(!firstLabel.label().equals(timer.view(BASE + 100).label()), "Visible tenths advance");
         yes(
                 !timer.begin(Messages.Summon.CRYSTAL, BASE + 1_000, preferences),
-                "Duplicate placement cannot restart countdown");
+                "Duplicate Crystal cannot restart countdown");
         yes(
                 !timer.begin(Messages.Summon.CALLING, BASE + 2_000, preferences),
-                "Another ritual relay cannot replace active countdown");
-        eq(
-                37,
-                timer.view(BASE + 3_000).seconds(),
-                "Duplicate relay retains original fallback origin");
-        for (int index = 0; index < 25; index++) timer.particles(BASE + 2_000 + index);
+                "Another relay cannot replace an active ritual");
+        eq(37, timer.view(BASE + 3_000).seconds(), "Duplicate relays retain original origin");
+        for (int index = 0; index < 100; index++) timer.particles(BASE + 3_000 + index);
         eq(
                 36,
                 timer.view(BASE + 4_000).seconds(),
-                "Dust before the three-second delay does not identify a variant");
-        eq(
-                0,
-                timer.view(BASE + 40_000).seconds(),
-                "Finished estimate waits without inventing an actual spawn");
+                "Dense or noisy particles cannot change a spawn estimate");
+        eq(0, timer.view(BASE + 40_000).seconds(), "Countdown expiry does not invent a spawn");
         yes(
                 timer.view(BASE + 40_000).label().contains("awaiting spawn"),
-                "Expired countdown says awaiting spawn");
-        yes(timer.view(BASE + 59_999) != null, "Late actual spawn retains a bounded waiting label");
-        yes(timer.view(BASE + 60_000) == null, "A missing spawn eventually expires the estimate");
+                "Expired forecast honestly waits for spawn chat");
+        yes(timer.view(BASE + 59_999) != null, "A late spawn retains a bounded waiting label");
+        yes(timer.view(BASE + 60_000) == null, "Missing spawn eventually expires the label");
         yes(
-                timer.begin(Messages.Summon.CALLING, BASE + 60_000, preferences),
-                "Expired ritual can be replaced");
-        eq(19, timer.view(BASE + 60_000).seconds(), "Calling uses its separate fallback");
-        timer.clear();
-        yes(timer.view(BASE + 60_000) == null, "Clear removes all ritual state");
-        yes(timer.begin(Messages.Summon.CRYSTAL, BASE, preferences), "Cleared timer can be reused");
-        yes(timer.view(BASE - 1) == null, "Clock reversal cannot show negative countdown age");
-
-        timer.clear();
+                !timer.confirmSpawn(BASE + 60_001, preferences),
+                "An expired placement cannot train timing history");
+        eq(0, preferences.ritualTimings.crystal.size(), "Expired rituals produce no observations");
+        yes(
+                timer.begin(Messages.Summon.CALLING, BASE + 61_000, preferences),
+                "Next completed Calling can begin");
+        eq(19, timer.view(BASE + 61_000).seconds(), "Calling uses its separate fallback");
+        yes(
+                timer.confirmSpawn(BASE + 80_000, preferences),
+                "Confirmed Calling learns its actual elapsed time");
+        eq(1, preferences.ritualTimings.calling.size(), "Only the observed tier is trained");
+        eq(
+                19_000,
+                preferences.ritualTimings.calling.getFirst(),
+                "Calling placement-to-spawn duration is saved");
+        yes(
+                !timer.confirmSpawn(BASE + 81_000, preferences),
+                "A replayed welcome cannot add another sample");
         timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
-        for (int index = 0; index < 20; index++) timer.particles(BASE + 3_000 + index);
+        timer.view(BASE + 1_000);
+        yes(timer.view(BASE + 500) == null, "Wall-clock reversal discards an ambiguous estimate");
+        yes(
+                !timer.confirmSpawn(BASE + 25_000, preferences),
+                "Reversed clock cannot teach a fabricated duration");
+        timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
+        yes(
+                !timer.begin(Messages.Summon.CRYSTAL, BASE - 1, preferences),
+                "Reversed placement relay cannot restart ritual");
+        timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
+        yes(
+                !timer.confirmSpawn(BASE + 4_999, preferences),
+                "Implausibly short relay is not a timing sample");
+        yes(
+                timer.view(BASE + 5_000) == null,
+                "Actual spawn always ends the estimate even when its sample is rejected");
+        preferences.ritualTimings.observe(true, 24_000);
+        timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
+        eq(40, timer.view(BASE).seconds(), "One fast spawn does not override configured fallback");
+        timer.clear();
+        preferences.ritualTimings.observe(true, 40_000);
+        timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
+        eq(40, timer.view(BASE).seconds(), "Two mixed observations still retain fallback");
+        timer.clear();
+        preferences.ritualTimings.observe(true, 24_500);
+        timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
         eq(
-                36.941,
-                timer.view(BASE + 3_059).seconds(),
-                "First burst remains open while delayed packets can still arrive");
+                24.5,
+                timer.view(BASE).seconds(),
+                "Three confirmations use the median rather than a noisy average");
+        yes(timer.view(BASE).detail().contains("3 spawns"), "Learned estimate exposes sample size");
+        yes(
+                timer.view(BASE).detail().contains("24.0–40.0s"),
+                "Mixed quick and normal rituals expose the observed range");
+        yes(timer.view(BASE).label().contains("~"), "Learned time remains visibly approximate");
+        timer.clear();
+        preferences.adaptiveCrystalTimer = false;
+        preferences.crystalSpawnSeconds = 55;
+        timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
         eq(
-                20.65,
-                timer.view(BASE + 3_350).seconds(),
-                "Twenty events select twenty-one seconds after the first burst");
-        eq(
-                0,
-                timer.view(BASE + 24_000).seconds(),
-                "Early low-density burst estimates a twenty-four-second Crystal");
-        timer.particles(BASE + 3_100);
+                51,
+                timer.view(BASE + 4_000).seconds(),
+                "Disabling learned timing retains explicit fallback");
+        yes(
+                timer.confirmSpawn(BASE + 26_000, preferences),
+                "Confirmed samples still collect while learned display is disabled");
+        timer.begin(Messages.Summon.CALLING, BASE + 30_000, preferences);
         eq(
                 19,
-                timer.view(BASE + 5_000).seconds(),
-                "Later dust cannot revise a finished burst sample");
-
+                timer.view(BASE + 30_000).seconds(),
+                "Crystal history does not override Calling fallback");
         timer.clear();
-        timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
-        for (int index = 0; index < 21; index++) timer.particles(BASE + 3_000 + index);
+        yes(timer.view(BASE + 31_000) == null, "Clear discards only the transient ritual");
         eq(
-                36.65,
-                timer.view(BASE + 3_350).seconds(),
-                "Twenty-one events select thirty-seven seconds after the first burst");
+                4,
+                preferences.ritualTimings.crystal.size(),
+                "Clearing ritual does not erase saved observations");
+    }
+
+    private static void timingHistoryAndMonotonicClock() throws Exception {
+        var timings = new dev.arachneledger.config.RitualTimings();
+        yes(!timings.observe(true, -1), "Negative durations are rejected");
+        yes(!timings.observe(true, 60_001), "Unbounded late relays are rejected");
+        for (int index = 0; index < 15; index++) timings.observe(true, 20_000 + index * 1_000);
+        eq(9, timings.crystal.size(), "Timing observations remain bounded");
+        eq(26_000, timings.crystal.getFirst(), "Oldest observations are discarded first");
+        eq(
+                30_000,
+                timings.estimate(true).medianMillis(),
+                "Bounded window median follows recent observations");
+        timings.observe(false, 18_000);
+        timings.observe(false, 20_000);
+        eq(19_000, timings.estimate(false).medianMillis(), "Even sample median is the midpoint");
+        yes(
+                !timings.estimate(false).learned(),
+                "At least three observations are required independently for each tier");
+        var gson = new Gson();
+        FarmingPreferences legacy =
+                gson.fromJson(
+                        "{\"adaptiveCrystalTimer\":false,\"crystalSpawnSeconds\":42}",
+                        FarmingPreferences.class);
+        legacy.validate();
+        yes(!legacy.adaptiveCrystalTimer, "Former adaptive preference survives upgrade");
+        eq(0, legacy.ritualTimings.crystal.size(), "Old settings initialize empty timing history");
+        FarmingPreferences damaged =
+                gson.fromJson(
+                        "{\"ritualTimings\":{\"crystal\":[null,-5,0,4999,24000,60001],\"calling\":null}}",
+                        FarmingPreferences.class);
+        damaged.validate();
+        eq(
+                1,
+                damaged.ritualTimings.crystal.size(),
+                "Damaged timing history keeps only plausible observations");
+        eq(0, damaged.ritualTimings.calling.size(), "Null timing tier migrates safely");
+        damaged.ritualTimings = timings.copy();
+        FarmingPreferences copy = damaged.copy();
+        copy.ritualTimings.clear();
+        eq(
+                9,
+                damaged.ritualTimings.crystal.size(),
+                "Settings drafts do not share mutable timing samples");
+        var restored = gson.fromJson(gson.toJson(damaged), FarmingPreferences.class);
+        restored.validate();
+        eq(
+                30_000,
+                restored.ritualTimings.estimate(true).medianMillis(),
+                "Observed timings survive serialization");
+
+        java.util.concurrent.atomic.AtomicLong nanos = new java.util.concurrent.atomic.AtomicLong();
+        TimerClock clock = new TimerClock(nanos::get);
+        eq(BASE, clock.now(BASE), "Monotonic timer anchors its display origin");
+        nanos.set(1_000_000_000L);
+        eq(
+                BASE + 1_000,
+                clock.now(BASE - 300_000),
+                "Wall-clock rollback cannot reverse elapsed timer time");
+        nanos.set(2_000_000_000L);
+        eq(
+                BASE + 2_000,
+                clock.now(BASE + 300_000),
+                "Wall-clock forward correction cannot expire ritual");
+        nanos.set(1_500_000_000L);
+        eq(
+                BASE + 2_000,
+                clock.now(BASE),
+                "Misordered monotonic observation cannot rewind displayed timer");
+        clock.reset();
+        nanos.set(Long.MAX_VALUE - 500_000_000L);
+        eq(BASE, clock.now(BASE), "Context reset establishes a fresh monotonic origin");
+        nanos.set(Long.MIN_VALUE + 499_999_999L);
+        eq(
+                BASE + 1_000,
+                clock.now(BASE),
+                "nanoTime signed rollover retains a valid short duration");
+
+        var directory = Files.createTempDirectory("arachne-learned-timing-");
+        nanos.set(0);
+        Tracker tracker = new Tracker(directory, nanos::get);
+        tracker.account("timing-test");
+        tracker.config.achievementNotifications = false;
+        tracker.updateLocation(true, true, true, "Arachne's Sanctuary", "sidebar", BASE);
+        tracker.tick(BASE, true);
+        for (int index = 0; index < 3; index++) {
+            long placement = 1_000 + index * 60_000L;
+            long duration = 24_000 + index * 1_000L;
+            nanos.set(placement * 1_000_000);
+            message(tracker, CRYSTAL, placement);
+            // Ordinary activity may create provisional history but cannot train spawn timing.
+            nanos.set((placement + 2_000) * 1_000_000);
+            message(tracker, "[BOSS] Arachne: My brood will feast on you!", placement + 2_000);
+            eq(
+                    index,
+                    tracker.config.farming.ritualTimings.crystal.size(),
+                    "Only actual welcome confirms a timing pair");
+            nanos.set((placement + duration) * 1_000_000);
+            message(tracker, INTRO, placement + duration);
+            eq(
+                    index + 1,
+                    tracker.config.farming.ritualTimings.crystal.size(),
+                    "Confirmed recovered fight trains exactly one timing");
+            message(tracker, INTRO, placement + duration + 1);
+            eq(
+                    index + 1,
+                    tracker.config.farming.ritualTimings.crystal.size(),
+                    "Repeated welcome cannot add another timing");
+            nanos.set((placement + duration + 1_000) * 1_000_000);
+            down(tracker, placement + duration + 1_000);
+        }
+        var settings =
+                gson.fromJson(Files.readString(directory.resolve("settings.json")), Config.class);
+        settings.validate();
+        eq(
+                3,
+                settings.farming.ritualTimings.crystal.size(),
+                "Tracker persists observations without a later settings interaction");
+        nanos.set(181_000_000_000L);
+        message(tracker, CRYSTAL, 181_000);
+        eq(
+                25,
+                tracker.ritualTimer(BASE + 181_000).seconds(),
+                "Live tracker uses the saved median after enough real spawns");
+        nanos.set(182_000_000_000L);
+        eq(
+                24,
+                tracker.ritualTimer(BASE - 300_000).seconds(),
+                "Production ritual survives a backwards wall-clock correction");
+        nanos.set(206_000_000_000L);
+        message(tracker, INTRO, 600_000);
+        eq(
+                25_000,
+                tracker.config.farming.ritualTimings.crystal.getLast(),
+                "Confirmed timing uses monotonic elapsed despite a wall-clock jump");
+        tracker.config.farming.pedestalFightTime = true;
+        nanos.set(208_000_000_000L);
+        eq(
+                2,
+                tracker.pedestalTimer(BASE - 400_000).seconds(),
+                "Pedestal fight time also survives wall-clock corrections");
+        eq(
+                3,
+                tracker.ledger.stats(true).kills(),
+                "Timing observations cannot manufacture an extra kill");
+        tracker.newSession();
+        eq(
+                4,
+                tracker.config.farming.ritualTimings.crystal.size(),
+                "Session reset preserves learned history");
+        nanos.set(209_000_000_000L);
+        message(tracker, INTRO, 610_000);
+        eq(
+                4,
+                tracker.config.farming.ritualTimings.crystal.size(),
+                "A joined fight without observed placement cannot teach timing");
+        var missed = tracker();
+        message(missed, CRYSTAL, 1_000);
+        down(missed, 42_000);
         eq(
                 0,
-                timer.view(BASE + 40_000).seconds(),
-                "Early dense burst estimates a forty-second Crystal");
-
-        timer.clear();
-        timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
-        for (int index = 0; index < 20; index++) timer.particles(BASE + 3_000 + index);
-        timer.particles(BASE + 3_350);
-        eq(
-                20.65,
-                timer.view(BASE + 3_350).seconds(),
-                "Event at the burst boundary is excluded from the completed first sample");
-        timer.clear();
-        timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
-        for (int index = 0; index < 20; index++) timer.particles(BASE + 6_500 + index);
-        eq(
-                20.65,
-                timer.view(BASE + 6_850).seconds(),
-                "Delayed first burst uses its own event timestamp");
-        eq(
-                3.5,
-                timer.view(BASE + 24_000).seconds(),
-                "Delayed burst does not pretend placement was observed three seconds earlier");
-
-        timer.clear();
-        timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
-        for (int index = 0; index < 21; index++) timer.particles(BASE + 3_000 + index * 8);
-        eq(
-                36.65,
-                timer.view(BASE + 3_350).seconds(),
-                "Dense packets stretched beyond sixty milliseconds still identify a normal ritual");
-        timer.clear();
-        timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
-        timer.particles(BASE + 3_000);
-        eq(
-                36.65,
-                timer.view(BASE + 3_350).seconds(),
-                "A single stray packet cannot shorten the configurable fallback");
-        timer.clear();
-        timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
-        for (int index = 0; index < 8; index++) timer.particles(BASE + 3_000 + index * 10);
-        timer.particles(BASE + 3_300);
-        eq(
-                36.65,
-                timer.view(BASE + 3_350).seconds(),
-                "Fragmented weak evidence retains fallback rather than guessing a quick spawn");
-        timer.clear();
-        timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
-        for (int index = 0; index < 20; index++) timer.particles(BASE + 8_000 + index);
-        eq(
-                31,
-                timer.view(BASE + 9_000).seconds(),
-                "Late unrelated dust cannot start a new sample beyond its bounded window");
-
-        preferences.crystalSpawnSeconds = 55;
-        timer.clear();
-        timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
-        eq(51, timer.view(BASE + 4_000).seconds(), "No dust retains the configurable fallback");
-        preferences.adaptiveCrystalTimer = false;
-        timer.clear();
-        timer.begin(Messages.Summon.CRYSTAL, BASE, preferences);
-        for (int index = 0; index < 25; index++) timer.particles(BASE + 3_000 + index);
-        eq(51, timer.view(BASE + 4_000).seconds(), "Adaptive disabled ignores dust classification");
-        preferences.adaptiveCrystalTimer = true;
-        preferences.callingSpawnSeconds = 25;
-        timer.clear();
-        timer.begin(Messages.Summon.CALLING, BASE, preferences);
-        for (int index = 0; index < 25; index++) timer.particles(BASE + 3_000 + index);
-        eq(21, timer.view(BASE + 4_000).seconds(), "Calling never uses Crystal dust timings");
+                missed.config.farming.ritualTimings.crystal.size(),
+                "Death recovery without welcome never teaches a spawn time");
     }
 
     private static Tracker tracker() throws Exception {
@@ -403,9 +530,9 @@ public final class FarmingChecks {
         for (int index = 0; index < 20; index++)
             adaptive.observeRitualParticles(BASE + 4_000 + index);
         eq(
-                20.65,
+                36.65,
                 adaptive.pedestalTimer(BASE + 4_350).seconds(),
-                "Tracker forwards dust event timestamps to the adaptive timer");
+                "Ritual particles cannot override fallback without confirmed timing history");
     }
 
     private static void localEventQueues() {
@@ -517,6 +644,103 @@ public final class FarmingChecks {
                 1,
                 silent.ledger.stats(true).loot().get("TARANTULA_EPIC"),
                 "Silent feedback still records rare loot");
+    }
+
+    private static void placementRelayOwnership() throws Exception {
+        Tracker crystal = tracker();
+        message(crystal, "☄ Owner placed an Arachne Crystal! Something is awakening!", 1_000);
+        message(
+                crystal,
+                "☄ [MVP+] ✦ YOU ✦ placed an Arachne Crystal! Something is awakening!",
+                1_100);
+        message(crystal, "[MVP+] Owner placed an Arachne Crystal!", 1_200);
+        eq(
+                1,
+                crystal.ledger.stats(true).crystals(),
+                "Name, YOU and rank relays cannot charge the same Crystal twice");
+        eq(
+                39.8,
+                crystal.ritualTimer(BASE + 1_200).seconds(),
+                "Decorated placement relays cannot restart countdown");
+        message(crystal, "☄ OtherPlayer placed an Arachne Crystal!", 1_300);
+        eq(
+                1,
+                crystal.ledger.stats(true).crystals(),
+                "Canonical identity never bypasses ownership checks");
+
+        Tracker recovered = tracker();
+        message(
+                recovered,
+                "\u2604 Owner placed an Arachne Crystal! Something is awakening!",
+                1_000);
+        message(recovered, "[BOSS] Arachne: My brood will feast on you!", 1_100);
+        var provisional = recovered.ledger.fights.getFirst();
+        message(
+                recovered,
+                "[MVP+] \u2726 YOU placed an Arachne Crystal! Something is awakening!",
+                1_200);
+        eq(
+                1,
+                recovered.ledger.fights.size(),
+                "Decorated relay preserves provisional fight history");
+        yes(
+                provisional.outcome == FightRecord.Outcome.FIGHTING,
+                "Same ritual relay cannot interrupt recovered boss activity");
+        eq(
+                39.8,
+                recovered.ritualTimer(BASE + 1_200).seconds(),
+                "Recovered activity cannot let a decorated relay restart the original countdown");
+        eq(1, recovered.ledger.stats(true).crystals(), "Recovered relay cannot add a second cost");
+        message(recovered, INTRO, 25_000);
+        eq(1, recovered.ledger.fights.size(), "Welcome confirms the original provisional fight");
+        eq(
+                24_000,
+                recovered.config.farming.ritualTimings.crystal.getFirst(),
+                "Learned timing retains the original placement despite its decorated relay");
+
+        Tracker calling = tracker();
+        for (int number = 1; number <= 4; number++) {
+            long at = 1_000 + number * 100L;
+            String suffix = number == 4 ? " Something is awakening!" : "";
+            message(
+                    calling,
+                    "☄ Owner placed an Arachne's Calling!" + suffix + " (" + number + "/4)",
+                    at);
+            message(
+                    calling,
+                    "[VIP] YOU placed an Arachne's Calling!" + suffix + " (" + number + "/4)",
+                    at + 1);
+            eq(
+                    number,
+                    calling.ledger.stats(true).callings(),
+                    "Distinct numbered Callings charge individually; relays do not");
+        }
+        eq(
+                18.999,
+                calling.ritualTimer(BASE + 1_401).seconds(),
+                "Only the completed Calling starts its timer");
+        eq(
+                0,
+                calling.ledger.fights.size(),
+                "Placement receipts and estimates cannot confirm a boss spawn");
+        eq(
+                0,
+                calling.ledger.stats(true).kills(),
+                "A four-part ritual cannot count as a qualifying kill");
+
+        Tracker rejected = tracker();
+        message(rejected, CRYSTAL, 1_000);
+        message(rejected, "[BOSS] Arachne: My brood will feast on you!", 2_000);
+        // A late welcome can reach a stale runtime pointer after its history was already closed.
+        rejected.ledger.fights.getFirst().outcome = FightRecord.Outcome.INTERRUPTED;
+        message(rejected, INTRO, 3_000);
+        yes(
+                rejected.ritualTimer(BASE + 3_000) != null,
+                "A rejected late welcome does not discard a pending ritual");
+        eq(
+                0,
+                rejected.config.farming.ritualTimings.crystal.size(),
+                "Rejected welcome cannot train timing history");
     }
 
     private static void rngCache() throws Exception {
@@ -663,6 +887,9 @@ public final class FarmingChecks {
                 "Previous death's delayed loot retains its actual fight across a new ritual");
 
         down(lateRewards, 2_300);
+        yes(
+                lateRewards.ritualTimer(BASE + 2_300) != null,
+                "Rejected death relay cannot cancel the next ritual's countdown");
         eq(
                 1,
                 lateRewards.ledger.stats(true).kills(),

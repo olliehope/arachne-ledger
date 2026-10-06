@@ -1,6 +1,7 @@
 package dev.arachneledger.ui;
 
 import dev.arachneledger.skyblock.Catalog;
+import dev.arachneledger.skyblock.ItemRarity;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -99,9 +100,7 @@ public final class RngAlerts {
             return 0;
         }
         return switch (item) {
-            case "ARACHNE_FANG" -> 0xFF55FF55;
-            case "TARANTULA_EPIC" -> 0xFFAA00AA;
-            case "TARANTULA_LEGENDARY" -> 0xFFFFAA00;
+            case "ARACHNE_FANG", "TARANTULA_EPIC", "TARANTULA_LEGENDARY" -> ItemRarity.color(item);
             default -> 0;
         };
     }

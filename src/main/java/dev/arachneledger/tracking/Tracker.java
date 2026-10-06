@@ -29,6 +29,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.LongSupplier;
 
 /**
  * Coordinates the client-thread tracking lifecycle. Observations pass eligibility and duplicate
@@ -73,6 +74,10 @@ public final class Tracker {
     private final FightReports reports = new FightReports();
     private final TrackingClock clock = new TrackingClock();
     private final PedestalTimer pedestal = new PedestalTimer();
+    private final TimerClock timerClock;
+    private long fightTimerStartedAt;
+    private long fightTimerTenth = -1;
+    private String fightTimerLabel;
     private final FarmingEvents farmingEvents = new FarmingEvents();
     public final TrackingDiagnostics diagnostics = new TrackingDiagnostics();
     private final FightLifecycle fights = new FightLifecycle(clock, reports, diagnostics);
@@ -116,7 +121,15 @@ public final class Tracker {
     }
 
     public Tracker(Path dataDirectory) {
+        this(dataDirectory, null);
+    }
+
+    /**
+     * The live client supplies nanoTime; deterministic observations can use their own timestamps.
+     */
+    public Tracker(Path dataDirectory, LongSupplier monotonicNanos) {
         this.dataDirectory = dataDirectory;
+        timerClock = new TimerClock(monotonicNanos);
         try {
             config =
                     Store.read(
@@ -222,6 +235,8 @@ public final class Tracker {
         reports.clear();
         rng.clear();
         pedestal.clear();
+        timerClock.reset();
+        clearFightTimer();
         farmingEvents.clear();
         lastSummonAt = 0;
         lastSummonMessage = "";
@@ -380,18 +395,24 @@ public final class Tracker {
                         fights.activeFight == null ? 0 : fights.activeFight.history.spawned;
                 fights.observeBossActivity(ledger, config, event, now);
                 if (event == Messages.Event.SPAWN) {
-                    pedestal.clear();
                     if (previousSpawn == 0
                             && fights.activeFight != null
-                            && (config.farming.spawnSound || config.farming.spawnTitle)) {
-                        farmingEvents.spawned(now);
+                            && fights.activeFight.history.spawned > 0) {
+                        long timerNow = timerClock.now(now);
+                        if (pedestal.confirmSpawn(timerNow, config.farming)) saveConfig();
+                        fightTimerStartedAt = timerNow;
+                        fightTimerTenth = -1;
+                        fightTimerLabel = null;
+                        if (config.farming.spawnSound || config.farming.spawnTitle)
+                            farmingEvents.spawned(now);
                     }
                 }
                 if (fights.activeFight != null) pickupWindowUntil = now + PICKUP_WINDOW_MILLIS;
             }
             case DOWN -> {
-                pedestal.clear();
                 if (fights.observeBossDeath(ledger, config, now)) {
+                    pedestal.clear();
+                    clearFightTimer();
                     pickupWindowUntil = now + REWARD_WINDOW_MILLIS;
                     rewardWindowUntil = now + REWARD_WINDOW_MILLIS;
                     lootDeduplicator.beginRewardWindow();
@@ -420,8 +441,9 @@ public final class Tracker {
     private void observeSummoningCue(String message, long now) {
         // Everyone's completed summon can awaken the boss; only own placements are charged.
         Messages.Summon summon = Messages.summon(message);
+        String identity = Messages.placementIdentity(message);
         if (summon == null
-                || (message.equals(lastSummonMessage)
+                || (identity.equals(lastSummonMessage)
                         && now >= lastSummonAt
                         && now - lastSummonAt < PLACEMENT_DUPLICATE_WINDOW_MILLIS)) return;
         boolean recovering = fights.activeFight != null;
@@ -432,10 +454,11 @@ public final class Tracker {
             // Recovered activity can coexist with an unconfirmed countdown. A new ritual
             // must replace both rather than remain blocked until the old estimate expires.
             pedestal.clear();
+            clearFightTimer();
         }
-        if (pedestal.begin(summon, now, config.farming)) {
+        if (pedestal.begin(summon, timerClock.now(now), config.farming)) {
             lastSummonAt = now;
-            lastSummonMessage = message;
+            lastSummonMessage = identity;
             fights.observeSummon(ledger, summon, now);
             if (recovering) rewardWindowUntil = 0;
             pickupWindowUntil = now + PICKUP_WINDOW_MILLIS;
@@ -451,13 +474,15 @@ public final class Tracker {
 
     /** Return false for a duplicate relay of the same own-placement message. */
     private boolean recordOwnPlacement(Messages.Event event, String message, long now) {
-        if (message.equals(lastPlacementMessage)
+        String identity = Messages.placementIdentity(message);
+        if (identity.equals(lastPlacementMessage)
+                && now >= lastPlacementAt
                 && now - lastPlacementAt < PLACEMENT_DUPLICATE_WINDOW_MILLIS) {
             diagnostics.record(now, SUMMON, IGNORED, message, "Duplicate own-placement relay");
             return false;
         }
         lastPlacementAt = now;
-        lastPlacementMessage = message;
+        lastPlacementMessage = identity;
         boolean crystal = event == Messages.Event.CRYSTAL;
         Ledger.Entry placement =
                 record(
@@ -505,24 +530,30 @@ public final class Tracker {
         if (config.farming.pedestalFightTime
                 && fights.activeFight != null
                 && fights.activeFight.history.spawned > 0) {
-            double seconds = Math.max(0, now - fights.activeFight.history.spawned) / 1000.0;
-            return new PedestalTimer.View(
-                    String.format(java.util.Locale.ROOT, "Arachne · %.1fs", seconds),
-                    "Fight time",
-                    0xFF55FFFF,
-                    seconds,
-                    true);
+            double seconds = Math.max(0, timerClock.now(now) - fightTimerStartedAt) / 1000.0;
+            long tenth = Math.round(seconds * 10);
+            if (fightTimerLabel == null || fightTimerTenth != tenth) {
+                fightTimerLabel = String.format(java.util.Locale.ROOT, "Arachne · %.1fs", seconds);
+                fightTimerTenth = tenth;
+            }
+            return new PedestalTimer.View(fightTimerLabel, "Fight time", 0xFF55FFFF, seconds, true);
         }
         return null;
     }
 
     /** The HUD can show a ritual even when the world-space pedestal label is disabled. */
     public PedestalTimer.View ritualTimer(long now) {
-        return ready() && !config.paused && inArena ? pedestal.view(now) : null;
+        return ready() && !config.paused && inArena ? pedestal.view(timerClock.now(now)) : null;
+    }
+
+    private void clearFightTimer() {
+        fightTimerStartedAt = 0;
+        fightTimerTenth = -1;
+        fightTimerLabel = null;
     }
 
     public void observeRitualParticles(long now) {
-        if (ready() && !config.paused && inArena) pedestal.particles(now);
+        // Retained for older integrations. Spawn timing is learned from confirmed chat pairs.
     }
 
     public List<FarmingEvents.RareDrop> drainRareDrops() {
@@ -615,6 +646,11 @@ public final class Tracker {
 
     public boolean acceptsStandLoot(long now) {
         return acceptsLoot(now) && rewardWindowUntil > 0 && now <= rewardWindowUntil;
+    }
+
+    /** The client scanner can skip formatting labels whose entity identities were accepted. */
+    public boolean hasSeenLootStand(UUID standId) {
+        return lootDeduplicator.hasSeenStand(standId);
     }
 
     /** UUIDs make repeated scans and server metadata updates count a hologram only once. */

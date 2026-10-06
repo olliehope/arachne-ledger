@@ -37,6 +37,12 @@ public final class SpawnChecks {
         tracker.message(text, "Player", BASE + elapsed);
     }
 
+    private static void damage(long expected, String text, String why) {
+        var found = Messages.damage(text);
+        yes(found.isPresent(), why + " is recognized");
+        eq(expected, found.orElseThrow(), why + " retains the exact damage");
+    }
+
     private static void tick(Tracker tracker, long elapsed) {
         tracker.tick(BASE + elapsed, true);
     }
@@ -109,6 +115,10 @@ public final class SpawnChecks {
                 Messages.Event.NONE,
                 "[BOSS] Arachne: I will be back, even stronger!",
                 "Final death dialogue is not activity");
+        event(
+                Messages.Event.NONE,
+                "[BOSS] Arachne: No, this is impossible\u2026",
+                "Unicode death ellipsis cannot restart fight activity");
         for (String phrase :
                 new String[] {
                     "A befitting welcome!", "With your sacrifice.", "Ahhhh...A Calling..."
@@ -157,6 +167,87 @@ public final class SpawnChecks {
                 Messages.Event.NONE,
                 "☄ OtherPlayer placed an Arachne Crystal! Something is awakening!",
                 "Another player's Crystal is not charged");
+        // Defensive format variants, not captures of a changed live server message.
+        for (String prefix :
+                new String[] {
+                    "[MVP+] \u2726 ",
+                    "\u2604 [MVP++] \ue067 [Player head]",
+                    "\u2764\ufe0f [MVP+] \u2726 "
+                }) {
+            String placement = prefix + "Player placed an Arachne Crystal! Something is awakening!";
+            yes(Messages.isSummoning(placement), "Emblem/rank order retains Crystal awakening");
+            event(Messages.Event.CRYSTAL, placement, "Decorated player keeps cost ownership");
+            yes(
+                    "ARACHNE_CRYSTAL".equals(Messages.placementIdentity(placement)),
+                    "Decorated Crystal shares its stable placement identity");
+        }
+        yes(
+                Messages.placementIdentity("You placed an Arachne Crystal!")
+                        .equals(
+                                Messages.placementIdentity(
+                                        "[MVP+] \u2726 Player placed an Arachne Crystal! Something is awakening!")),
+                "Relayed name and awakening text do not create a distinct Crystal placement");
+        for (int counter = 1; counter <= 4; counter++) {
+            String plain = "You placed an Arachne's Calling! (" + counter + "/4)";
+            String decorated =
+                    "[MVP+] \u2726 Player placed an Arachne\u02bcs Calling! Something is awakening! ("
+                            + counter
+                            + "/4)";
+            yes(
+                    ("ARACHNE_KEEPER_FRAGMENT:" + counter + "/4")
+                            .equals(Messages.placementIdentity(plain)),
+                    "Calling identity keeps its ritual counter");
+            yes(
+                    Messages.placementIdentity(plain).equals(Messages.placementIdentity(decorated)),
+                    "Relayed Calling decoration and awakening keep the same counter identity");
+        }
+        yes(
+                !Messages.placementIdentity("You placed an Arachne's Calling! (1/4)")
+                        .equals(
+                                Messages.placementIdentity(
+                                        "You placed an Arachne's Calling! (2/4)")),
+                "Successive Calling fragments remain separate placements");
+        yes(
+                "ARACHNE_KEEPER_FRAGMENT"
+                        .equals(Messages.placementIdentity("You placed an Arachne's Calling!")),
+                "A Calling without a displayed counter still has a stable identity");
+        event(
+                Messages.Event.CALLING,
+                "[MVP+] \u2726 YOU\ue067 placed an Arachne\u02bcs Calling! Something is awakening! (4/4)",
+                "Decorations beside YOU and modifier apostrophe are normalized");
+        for (String placement :
+                new String[] {
+                    "[MVP+] Player: placed an Arachne Crystal! Something is awakening!",
+                    "\u2726 [MVP+] Player: YOU placed an Arachne Crystal! Something is awakening!",
+                    "Guild > [MVP+] \u2726 Player placed an Arachne Crystal! Something is awakening!",
+                    "[Party] Player: \u2604 YOU placed an Arachne Crystal! Something is awakening!"
+                }) {
+            yes(!Messages.isArachneCue(placement), "Decorated quoted chat is not a server cue");
+            event(Messages.Event.NONE, placement, "Decorated quoted chat adds no cost");
+            yes(
+                    Messages.placementIdentity(placement) == null,
+                    "Quoted player chat has no placement identity");
+        }
+        yes(
+                Messages.placementIdentity("[BOSS] Arachne: With your sacrifice.") == null,
+                "Boss activity cannot identify a paid placement");
+        damage(10_000, "Your Damage: 10,000 (Position #1)", "Comma-grouped damage");
+        damage(9_999, "Your Damage:\u2009 9\u202f999 (Position #2)", "Thin-space damage");
+        damage(0, "\u2726 Your Damage: 0 (Position #10)", "Decorated zero damage");
+        damage(10_000, "\u200eYour Damage: １０,０００ (Position #1)", "Canonical digit format");
+        damage(Long.MAX_VALUE, "Your Damage: " + Long.MAX_VALUE, "Maximum integer damage");
+        for (String receipt :
+                new String[] {
+                    "Player: Your Damage: 100,000 (Position #1)",
+                    "Party > Player: Your Damage: 100,000 (Position #1)",
+                    "Your Damage: 10,00 (Position #1)",
+                    "Your Damage: 1 00 000 (Position #1)",
+                    "Your Damage: -10000 (Position #1)",
+                    "Your Damage: 9223372036854775808 (Position #1)"
+                }) {
+            yes(Messages.damage(receipt).isEmpty(), "Quoted or invalid damage is rejected");
+        }
+        yes(Messages.clean(null).isEmpty(), "Absent server text is harmless");
         for (int count = 1; count <= 3; count++) {
             yes(
                     !Messages.isSummoning(

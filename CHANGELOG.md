@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.0
+
+- Spawn countdowns now learn from confirmed placement-to-spawn timings, with separate Crystal and Calling histories. After three observations, the estimate uses the median of up to nine recent samples; settings show the observed range and can reset the history.
+- Pedestal countdown and fight labels use a monotonic clock, keep their origin across repeated chat relays, and wait for actual spawn confirmation at zero. Removed particle-density guesses and their packet hook.
+- Summon and damage parsing handles decorative emblems, Unicode spacing and valid grouped numbers. Repeated own-placement relays share a stable identity so a different prefix cannot charge the same summon twice.
+- Added Text only, Soft panel and Border HUD presentation styles, independent of content layouts and saved presets. Reorganized Display controls and added a live draft preview.
+- Reduced repeated HUD formatting and skipped already-recorded reward labels before formatting their styled names. Corrected Soul String to Rare, and Arack and Dark Queen's Soul to Epic rarity colors.
+- Existing layouts, recorded prices, loot, fight history and achievements are preserved. Scavenger tracking continues to use measured purse changes rather than fixed mob coin formulas.
+
 ## 1.4.0
 
 - Reduced graph work with cached history indexes, bounded drawing, and fewer spawn-marker draw calls. Cached HUD rows, dashboard history, and hourly projections across unchanged frames.

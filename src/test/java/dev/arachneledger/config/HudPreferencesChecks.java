@@ -43,6 +43,7 @@ public final class HudPreferencesChecks {
         rowOrderMigration(root.resolve("row-order.json"));
         rowMovement();
         presetsAndIsolation();
+        presentationStyles(root.resolve("style.json"));
         System.out.println("PASS: " + checks + " HUD preference, migration and isolation checks.");
     }
 
@@ -438,5 +439,82 @@ public final class HudPreferencesChecks {
                 HudRowOrder.rows(interleaved, HudRowOrder.Group.REWARDS),
                 HudRowOrder.rows(moved, HudRowOrder.Group.REWARDS),
                 "Summary movement leaves the entire reward order unchanged");
+    }
+
+    private static void presentationStyles(Path file) throws Exception {
+        for (boolean background : List.of(false, true)) {
+            Files.writeString(
+                    file,
+                    "{\"hudBackground\":"
+                            + background
+                            + ",\"hudPreferences\":{\"showTotalProfit\":false}}");
+            Config legacy = read(file);
+            same(
+                    HudPreferences.Style.INHERIT,
+                    legacy.hudPreferences.style,
+                    "Existing settings inherit the saved appearance");
+            same(
+                    background ? HudPreferences.Style.SOFT_PANEL : HudPreferences.Style.TEXT_ONLY,
+                    legacy.hudPreferences.resolvedStyle(legacy.hudBackground),
+                    "Migration preserves both old background choices");
+            yes(
+                    !legacy.hudPreferences.showTotalProfit,
+                    "Style migration leaves row choices intact");
+            Store.write(file, legacy);
+            same(
+                    legacy.hudPreferences.resolvedStyle(background),
+                    read(file).hudPreferences.resolvedStyle(background),
+                    "Inherited presentation survives a save");
+        }
+        Files.writeString(
+                file, "{\"hudBackground\":true,\"hudPreferences\":{\"style\":\"missing\"}}");
+        same(
+                HudPreferences.Style.SOFT_PANEL,
+                read(file).hudPreferences.resolvedStyle(true),
+                "An unknown style falls back to the saved background");
+
+        Config selected = new Config();
+        selected.hudPreferences.style = HudPreferences.Style.BORDER;
+        selected.hudPreferences.applyPreset(HudPreferences.Layout.MINIMAL);
+        same(
+                HudPreferences.Style.BORDER,
+                selected.hudPreferences.style,
+                "Applying a content preset preserves presentation");
+        Store.write(file, selected);
+        same(
+                HudPreferences.Style.BORDER,
+                read(file).hudPreferences.style,
+                "An explicit style persists independently of the legacy flag");
+
+        HudPreferences preferences = new HudPreferences();
+        List<Boolean> originalRows = rowFlags(preferences);
+        List<String> originalOrder = List.copyOf(preferences.rowOrder);
+        preferences.cycleStyle(false);
+        same(
+                HudPreferences.Style.SOFT_PANEL,
+                preferences.style,
+                "Text-only saved appearance cycles to a panel");
+        preferences.cycleStyle(false);
+        same(HudPreferences.Style.BORDER, preferences.style, "Panel cycles to a border");
+        preferences.cycleStyle(true);
+        same(
+                HudPreferences.Style.TEXT_ONLY,
+                preferences.style,
+                "Border cycles to text, without returning to inheritance");
+        same(originalRows, rowFlags(preferences), "Cycling style keeps all row visibility");
+        same(originalOrder, preferences.rowOrder, "Cycling style keeps custom row order");
+        same(
+                0,
+                preferences.resolvedStyle(true).backgroundColor(),
+                "Explicit text-only overrides a saved background flag");
+        same(
+                0x80000000,
+                HudPreferences.Style.SOFT_PANEL.backgroundColor(),
+                "Soft panel retains the existing black background opacity");
+        yes(HudPreferences.Style.BORDER.borderColor() != 0, "Border has a visible outline");
+        HudPreferences copy = preferences.copy();
+        yes(copy.sameDisplay(preferences), "Copies preserve presentation choices");
+        copy.style = HudPreferences.Style.BORDER;
+        yes(!copy.sameDisplay(preferences), "An explicit style is part of the display draft");
     }
 }

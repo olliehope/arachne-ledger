@@ -1,6 +1,7 @@
 package dev.arachneledger.ui.screen;
 
 import dev.arachneledger.config.FarmingPreferences;
+import dev.arachneledger.config.RitualTimings;
 import dev.arachneledger.ui.FlatButton;
 
 import net.minecraft.client.gui.screens.Screen;
@@ -13,6 +14,7 @@ import java.util.function.IntConsumer;
 public final class FarmingSettingsScreen extends SettingsListScreen {
     private final FarmingPreferences draft;
     private int selectedTab;
+    private boolean resetTimings;
 
     public FarmingSettingsScreen(Screen parent) {
         super(parent, "Farming cues", "Save applies all tabs. Cancel discards your changes.");
@@ -69,17 +71,18 @@ public final class FarmingSettingsScreen extends SettingsListScreen {
                         "Draw pedestal text through blocks. Turning this off uses normal world visibility.",
                         () -> draft.pedestalThroughWalls = !draft.pedestalThroughWalls),
                 toggle(
-                        "Adaptive Crystal timing",
+                        "Learned spawn timing",
                         draft.adaptiveCrystalTimer,
-                        "Sample the first nearby ritual dust burst after three seconds to estimate the Crystal delay. Without a sample, use your Crystal fallback. Calling timing uses its own fallback.",
+                        "Use the median of at least three confirmed placement-to-spawn times, learned separately for Crystals and Callings. The observed range shows when ritual speeds vary. New confirmed observations are saved even while this option is off. Particles never determine the countdown.",
                         () -> draft.adaptiveCrystalTimer = !draft.adaptiveCrystalTimer),
+                timingHistory(),
                 stepper(
                         "Crystal fallback · " + draft.crystalSpawnSeconds + "s",
                         draft.crystalSpawnSeconds,
                         10,
                         60,
                         1,
-                        "Estimated Crystal delay, in seconds. Used when adaptive timing is off or no nearby ritual particles were observed. It never changes spawn detection.",
+                        "Estimated Crystal delay, in seconds. Used when learned timing is off or fewer than three confirmed Crystal timings exist. It never changes spawn detection.",
                         value -> draft.crystalSpawnSeconds = value),
                 stepper(
                         "Calling fallback · " + draft.callingSpawnSeconds + "s",
@@ -87,7 +90,7 @@ public final class FarmingSettingsScreen extends SettingsListScreen {
                         10,
                         60,
                         1,
-                        "Estimated Calling delay, in seconds. The completed 4/4 Calling placement starts the countdown; repeated relays do not restart it.",
+                        "Estimated Calling delay, in seconds. Used when learned timing is off or fewer than three confirmed Calling timings exist. The completed 4/4 Calling placement starts the countdown; repeated relays do not restart it.",
                         value -> draft.callingSpawnSeconds = value),
                 stepper(
                         "Label scale · "
@@ -106,6 +109,41 @@ public final class FarmingSettingsScreen extends SettingsListScreen {
                         8,
                         "Maximum distance from the pedestal for drawing its label, from 16 to 128 blocks.",
                         value -> draft.pedestalRange = value));
+    }
+
+    private Option timingHistory() {
+        var crystal = draft.ritualTimings.estimate(true);
+        var calling = draft.ritualTimings.estimate(false);
+        return new Option(
+                "Timing samples · "
+                        + crystal.samples()
+                        + " Crystal / "
+                        + calling.samples()
+                        + " Calling",
+                "Reset",
+                false,
+                tracker.error.isEmpty() && crystal.samples() + calling.samples() > 0,
+                "Crystal: "
+                        + timingDescription(crystal)
+                        + ". Calling: "
+                        + timingDescription(calling)
+                        + ". Keep up to nine recent timings per tier. Reset discards observations on Save; Cancel keeps them.",
+                () -> {
+                    draft.ritualTimings.clear();
+                    resetTimings = true;
+                    changed();
+                });
+    }
+
+    private static String timingDescription(RitualTimings.Estimate estimate) {
+        if (estimate.samples() == 0) return "no confirmed observations";
+        return String.format(
+                Locale.ROOT,
+                "%d observations, median %.1fs, range %.1f–%.1fs",
+                estimate.samples(),
+                estimate.medianMillis() / 1_000.0,
+                estimate.minimumMillis() / 1_000.0,
+                estimate.maximumMillis() / 1_000.0);
     }
 
     private List<Option> alertOptions() {
@@ -218,6 +256,9 @@ public final class FarmingSettingsScreen extends SettingsListScreen {
         }
         FarmingPreferences saved = tracker.config.farming;
         FarmingPreferences replacement = draft.copy();
+        // Spawns can occur while this draft is open. Saving display options preserves those
+        // samples.
+        if (!resetTimings) replacement.ritualTimings = saved.ritualTimings.copy();
         replacement.validate();
         tracker.config.farming = replacement;
         tracker.saveConfig();
@@ -226,6 +267,8 @@ public final class FarmingSettingsScreen extends SettingsListScreen {
             note = "Storage error; settings were not saved. See the Minecraft log.";
         } else {
             note = "Saved farming cues.";
+            draft.ritualTimings = replacement.ritualTimings.copy();
+            resetTimings = false;
         }
         rebuildWidgets();
     }

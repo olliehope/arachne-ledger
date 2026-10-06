@@ -262,7 +262,34 @@ public final class HudContent {
                 Comparator.comparingInt(row -> order.indexOf(orderKey(row)));
         rewards.sort(byDisplayOrder);
         metrics.sort(byDisplayOrder);
+        if (lootLedger) {
+            prepareLedgerSummaries(rewards);
+            prepareLedgerSummaries(metrics);
+        }
         return new Snapshot(rewards, metrics);
+    }
+
+    /** Build coloured summaries with the cached snapshot, avoiding new parts on every frame. */
+    private static void prepareLedgerSummaries(List<Row> rows) {
+        for (int index = 0; index < rows.size(); index++) {
+            Row row = rows.get(index);
+            if (!row.parts().isEmpty()
+                    || row.id().startsWith("loot:")
+                    || row.id().equals("emptyLoot")) continue;
+            List<Part> parts =
+                    List.of(
+                            new Part(row.label() + (row.value().isEmpty() ? "" : ": "), Hud.WHITE),
+                            new Part(row.value(), row.valueColor()));
+            rows.set(
+                    index,
+                    new Row(
+                            row.id(),
+                            row.label(),
+                            row.value(),
+                            row.labelColor(),
+                            row.valueColor(),
+                            parts));
+        }
     }
 
     private static String progressText(Achievements.Progress progress) {

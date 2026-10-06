@@ -11,6 +11,34 @@ import java.util.Set;
  * remain independent. A preset is an explicit reset; validation preserves individual row choices.
  */
 public final class HudPreferences {
+    public enum Style {
+        INHERIT("Saved style", 0, 0),
+        TEXT_ONLY("Text only", 0, 0),
+        SOFT_PANEL("Soft panel", 0x80000000, 0),
+        BORDER("Border", 0x600B0D10, 0x806B7078);
+
+        private final String label;
+        private final int backgroundColor, borderColor;
+
+        Style(String label, int backgroundColor, int borderColor) {
+            this.label = label;
+            this.backgroundColor = backgroundColor;
+            this.borderColor = borderColor;
+        }
+
+        public String label() {
+            return label;
+        }
+
+        public int backgroundColor() {
+            return backgroundColor;
+        }
+
+        public int borderColor() {
+            return borderColor;
+        }
+    }
+
     public enum Layout {
         CLASSIC("Classic"),
         MINIMAL("Minimal"),
@@ -47,6 +75,9 @@ public final class HudPreferences {
     public Layout layout = Layout.MINIMAL;
     public Sort sort = Sort.VALUE;
 
+    // Older saves keep their exact background choice until a presentation style is selected.
+    public Style style = Style.INHERIT;
+
     // The constructor supplies the fresh preset; Gson restores existing individual choices.
     public boolean showTitle = true;
     public boolean showLoot = false;
@@ -80,6 +111,22 @@ public final class HudPreferences {
 
     public HudPreferences() {
         applyPreset(Layout.LOOT);
+    }
+
+    public Style resolvedStyle(boolean savedBackground) {
+        return style == null || style == Style.INHERIT
+                ? savedBackground ? Style.SOFT_PANEL : Style.TEXT_ONLY
+                : style;
+    }
+
+    /** Presentation choices remain independent of content layout and row presets. */
+    public void cycleStyle(boolean savedBackground) {
+        style =
+                switch (resolvedStyle(savedBackground)) {
+                    case TEXT_ONLY -> Style.SOFT_PANEL;
+                    case SOFT_PANEL -> Style.BORDER;
+                    default -> Style.TEXT_ONLY;
+                };
     }
 
     /** Restore a complete preset, including loot sorting and individual item visibility. */
@@ -128,6 +175,9 @@ public final class HudPreferences {
         if (sort == null) {
             sort = Sort.VALUE;
         }
+        if (style == null) {
+            style = Style.INHERIT;
+        }
         maxLootRows = Math.max(0, Math.min(8, maxLootRows));
         rowOrder = HudRowOrder.normalize(rowOrder);
         Set<String> supportedHiddenItems = new LinkedHashSet<>();
@@ -146,6 +196,7 @@ public final class HudPreferences {
         HudPreferences copy = new HudPreferences();
         copy.layout = layout;
         copy.sort = sort;
+        copy.style = style;
         copy.showTitle = showTitle;
         copy.showLoot = showLoot;
         copy.showLootValues = showLootValues;
@@ -179,6 +230,7 @@ public final class HudPreferences {
                 && displayFlags() == other.displayFlags()
                 && layout == other.layout
                 && sort == other.sort
+                && style == other.style
                 && maxLootRows == other.maxLootRows
                 && hiddenItems.equals(other.hiddenItems)
                 && rowOrder.equals(other.rowOrder)

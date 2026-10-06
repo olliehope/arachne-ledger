@@ -24,7 +24,7 @@ Run `./gradlew formatJava` or `.\gradlew.bat formatJava` before committing Java 
 | `diagnostics` | Bounded observation history, tracking snapshots, and plain-text reports |
 | `pricing` | Bazaar fetches, NPC/George sale defaults, and salvage valuation |
 | `ui` and `ui.screen` | HUD, graph rendering, and screens |
-| `integration` and `mixin` | Optional Mod Menu, pickup hooks, and nearby ritual particle observations |
+| `integration` and `mixin` | Optional Mod Menu and pickup hooks |
 
 Keep server-format parsing separate from accounting. Price and display changes should preserve recorded history unless the player explicitly requests a correction or repricing. Config field names and ledger JSON are save compatibility contracts.
 
@@ -36,9 +36,11 @@ For a new achievement, add a stable entry in `Achievements.definitions()`; add a
 
 `RngSince` derives pet and fang observations from the same qualifying fight history. Receipts retain their original fight association; manual corrections are excluded from detected reward rates and dry-run resets. Achievement dry metrics reuse a joined history snapshot, and their earned state remains separate from recalculated intervals.
 
-`FarmingEvents` and `PedestalTimer` hold optional farming cues separately from financial tracking. Timer zero is presentation only: actual server signals still control spawn, death, and active time. `FarmingPreferences` owns bounded timing and alert choices; the settings screen edits a copy before committing it. Keep sound, chat, and overlay delivery local, and preserve saved notification acknowledgments when preferences change.
+`FarmingEvents` and `PedestalTimer` hold optional farming cues separately from financial tracking. Timer zero is presentation only: actual server signals still control spawn, death, and active time. `RitualTimings` keeps bounded confirmed observations per tier; `TimerClock` advances pedestal labels monotonically while journal dates retain wall time. `FarmingPreferences` owns timing and alert choices; its settings draft preserves observations learned while the form is open unless the user explicitly resets them. Keep sound, chat, and overlay delivery local, and preserve saved notification acknowledgments when preferences change.
 
 `GraphSamples.Index` builds range indexes once per immutable series; graph drawing uses bounded pixel columns that retain peaks and final steps. `HudContent.Cache` and `DashboardData` reuse immutable display snapshots. Financial caches retain Session and Total separately; recent projections share prefix sums and exact receipt-expiry boundaries. A live elapsed clock should not trigger a full-history walk on every frame.
+
+`RewardLabelScanner` filters already-accepted entity UUIDs before converting styled names. `ItemRarity` owns supported loot display colors; item appearance never decides its sell price. `HudPreferences` separates presentation style from content layout and preserves the legacy background setting until an explicit style is chosen.
 
 `SummonStats` compares qualified fights using the observed `FightRecord.summonTier`; missing legacy tiers stay Unknown. `SessionGoals`, `GoalProgress`, and `SessionGoalMonitor` separate preferences, session progress, and durable local notification acknowledgment. `Supplies` estimates personal consumption independently of the inventory reader. Keep these calculations independent of Minecraft and keep presets as detached configuration copies.
 

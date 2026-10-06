@@ -2,10 +2,10 @@ package dev.arachneledger.ui;
 
 import dev.arachneledger.client.ArachneLedger;
 import dev.arachneledger.config.Config;
-import dev.arachneledger.config.GraphPreferences;
 import dev.arachneledger.config.HudPreferences;
 import dev.arachneledger.ledger.Analytics;
 import dev.arachneledger.ledger.Ledger;
+import dev.arachneledger.skyblock.ItemRarity;
 import dev.arachneledger.tracking.Tracker;
 
 import net.minecraft.ChatFormatting;
@@ -24,6 +24,7 @@ import java.util.Locale;
 public final class Hud {
     public static final int WIDTH = 224, WHITE = 0xFFFFFFFF, GOLD = 0xFFFFAA00, TITLE = 0xFFFFFF55;
     private static final int LOOT_WIDTH = 300;
+    private static final GraphHudContent.Cache GRAPH_CONTENT = new GraphHudContent.Cache();
     private static final Component TITLE_TEXT =
             Component.literal("Arachne Profit Tracker")
                     .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD);
@@ -83,14 +84,7 @@ public final class Hud {
                             + (preferences.showCountdown ? 11 : 0));
         }
         var preferences = config.graph;
-        int metricRows = 0;
-        if (!preferences.enabledSeries().isEmpty()) {
-            metricRows =
-                    (preferences.showTotal ? 1 : 0)
-                            + (preferences.showHourly ? 1 : 0)
-                            + (preferences.showProjectedHourly ? 1 : 0)
-                            + (preferences.showProjectedTotal ? 1 : 0);
-        }
+        int metricRows = GraphHudContent.metricRowCount(preferences);
         int statusRows =
                 (preferences.showActiveTime ? 1 : 0)
                         + (preferences.showScope ? 1 : 0)
@@ -167,8 +161,12 @@ public final class Hud {
         graphics.pose().pushMatrix();
         graphics.pose().translate(hudBounds.x(), hudBounds.y());
         graphics.pose().scale(hudBounds.scale());
-        if (display.hudBackground) {
-            graphics.fill(0, 0, unscaledWidth, unscaledHeight, 0x80000000);
+        var style = preferences.resolvedStyle(display.hudBackground);
+        if (style.backgroundColor() != 0) {
+            graphics.fill(0, 0, unscaledWidth, unscaledHeight, style.backgroundColor());
+        }
+        if (style.borderColor() != 0) {
+            graphics.outline(0, 0, unscaledWidth, unscaledHeight, style.borderColor());
         }
         boolean showTitle = display.hudView == Config.View.GRAPH || preferences.showTitle;
         if (showTitle) {
@@ -206,30 +204,14 @@ public final class Hud {
             GuiGraphicsExtractor graphics, Tracker tracker, Font font, int rowY) {
         var preferences = tracker.config.graph;
         var data = GraphData.build(tracker.ledger, tracker.config.total, preferences);
-        int start = rowY;
-        rowY = drawGraphMetrics(graphics, font, data, preferences, rowY);
-        if (rowY > start) {
+        var content = GRAPH_CONTENT.get(tracker, data);
+        rowY = drawGraphRows(graphics, font, content.metrics(), rowY);
+        if (!content.metrics().isEmpty()) {
             rowY += 3;
         }
         Graph.draw(graphics, font, data, preferences, 4, rowY, WIDTH - 8, 62, -1, -1, false);
         rowY += 66;
-        if (preferences.showSpawnCount) {
-            row(
-                    graphics,
-                    font,
-                    "Arachne spawns",
-                    Long.toString(data.spawnCount()),
-                    rowY,
-                    0xFF7777FF);
-            rowY += 11;
-        }
-        if (preferences.showActiveTime) {
-            row(graphics, font, "Active time", shortTime(data.elapsed()), rowY, 0xFF55FFFF);
-            rowY += 11;
-        }
-        if (preferences.showScope) {
-            row(graphics, font, "Display", displayMode(tracker), rowY, Graph.MUTED);
-        }
+        drawGraphRows(graphics, font, content.status(), rowY);
     }
 
     /** Layout dimensions are derived from the same row switches used by HudContent. */
@@ -355,14 +337,7 @@ public final class Hud {
 
     private static void drawLedgerSummary(
             GuiGraphicsExtractor graphics, Font font, HudContent.Row row, int rowY) {
-        List<HudContent.Part> parts =
-                row.parts().isEmpty()
-                        ? List.of(
-                                new HudContent.Part(
-                                        row.label() + (row.value().isEmpty() ? "" : ": "), WHITE),
-                                new HudContent.Part(row.value(), row.valueColor()))
-                        : row.parts();
-        drawParts(graphics, font, parts, 4, rowY);
+        drawParts(graphics, font, row.parts(), 4, rowY);
     }
 
     private static void drawParts(
@@ -402,76 +377,21 @@ public final class Hud {
         return rowY;
     }
 
-    private static int drawGraphMetrics(
-            GuiGraphicsExtractor graphics,
-            Font font,
-            GraphData.Snapshot data,
-            GraphPreferences preferences,
-            int rowY) {
-        var metric = data.primary();
-        if (!data.series().isEmpty()) {
-            if (preferences.showTotal) {
-                row(
-                        graphics,
-                        font,
-                        metric.totalLabel(),
-                        Format.coins(data.value(metric)),
-                        rowY,
-                        metric.color(data.value(metric)));
-                rowY += 11;
-            }
-            if (preferences.showHourly) {
-                row(
-                        graphics,
-                        font,
-                        metric.hourlyLabel(),
-                        data.elapsed() < 1000 ? "--" : Format.coins(data.hourly(metric)),
-                        rowY,
-                        data.elapsed() < 1000 ? Graph.MUTED : metric.color(data.hourly(metric)));
-                rowY += 11;
-            }
-            if (preferences.showProjectedHourly) {
-                row(
-                        graphics,
-                        font,
-                        metric.projectedLabel(),
-                        data.projectionReady() ? Format.coins(data.projectedHourly(metric)) : "--",
-                        rowY,
-                        data.projectionReady()
-                                ? metric.color(data.projectedHourly(metric))
-                                : Graph.MUTED);
-                rowY += 11;
-            }
-            if (preferences.showProjectedTotal) {
-                row(
-                        graphics,
-                        font,
-                        metric.projectedTotalLabel(),
-                        data.projectionReady() ? Format.coins(data.projectedTotal(metric)) : "--",
-                        rowY,
-                        data.projectionReady()
-                                ? metric.color(data.projectedTotal(metric))
-                                : Graph.MUTED);
-                rowY += 11;
-            }
+    private static int drawGraphRows(
+            GuiGraphicsExtractor graphics, Font font, List<GraphHudContent.Row> rows, int rowY) {
+        for (GraphHudContent.Row row : rows) {
+            int labelWidth = Math.max(20, WIDTH - 14 - font.width(row.value()));
+            graphics.text(
+                    font,
+                    font.plainSubstrByWidth(row.label(), labelWidth),
+                    4,
+                    rowY,
+                    Graph.MUTED,
+                    true);
+            right(graphics, font, row.value(), WIDTH - 4, rowY, row.color());
+            rowY += 11;
         }
         return rowY;
-    }
-
-    private static String displayMode(Tracker tracker) {
-        String mode = tracker.config.total ? "Total" : "This session";
-        if (tracker.config.paused) {
-            mode += " (paused)";
-        } else if (!tracker.inArena) {
-            mode += " (waiting)";
-        } else if (tracker.isSummoning()) {
-            mode += " (summoning)";
-        } else if (tracker.isAfk()) {
-            mode += " (AFK)";
-        } else if (tracker.waitingForSpawn()) {
-            mode += " (waiting)";
-        }
-        return mode;
     }
 
     public static List<String> sortedLoot(Analytics.Snapshot analytics, Ledger.Stats stats) {
@@ -485,22 +405,7 @@ public final class Hud {
     }
 
     public static int itemColor(String id) {
-        return switch (id) {
-            case "ENCHANTED_STRING", "ENCHANTED_SPIDER_EYE", "LUXURIOUS_SPOOL", "ARACHNE_FANG" ->
-                    0xFF55FF55;
-            case "ARACHNE_FRAGMENT",
-                    "ARACHNE_SHARD",
-                    "ARACHNE_HELMET",
-                    "ARACHNE_CHESTPLATE",
-                    "ARACHNE_LEGGINGS",
-                    "ARACHNE_BOOTS",
-                    "ARACK" ->
-                    0xFF5555FF;
-            case "ESSENCE_SPIDER", "DARK_QUEENS_SOUL_DROP" -> 0xFFFF55FF;
-            case "TARANTULA_EPIC" -> 0xFFAA00AA;
-            case "TARANTULA_LEGENDARY" -> GOLD;
-            default -> WHITE;
-        };
+        return ItemRarity.color(id);
     }
 
     public static String decimal(double value) {
@@ -509,19 +414,6 @@ public final class Hud {
 
     public static String shortTime(long millis) {
         return Format.time(millis);
-    }
-
-    static void row(
-            GuiGraphicsExtractor graphics,
-            Font font,
-            String label,
-            String value,
-            int y,
-            int color) {
-        int labelWidth = Math.max(20, WIDTH - 14 - font.width(value));
-        graphics.text(
-                font, font.plainSubstrByWidth(label + ":", labelWidth), 4, y, Graph.MUTED, true);
-        right(graphics, font, value, WIDTH - 4, y, color);
     }
 
     static void right(

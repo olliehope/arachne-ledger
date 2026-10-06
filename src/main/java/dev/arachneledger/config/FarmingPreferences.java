@@ -5,7 +5,9 @@ public final class FarmingPreferences {
     public boolean pedestalTimer = true;
     public boolean pedestalFightTime = false;
     public boolean pedestalThroughWalls = false;
+    // Keep this persisted name so the former adaptive-timer preference survives upgrades.
     public boolean adaptiveCrystalTimer = true;
+    public RitualTimings ritualTimings = new RitualTimings();
     public int crystalSpawnSeconds = 40;
     public int callingSpawnSeconds = 19;
     public double pedestalScale = 1;
@@ -24,6 +26,7 @@ public final class FarmingPreferences {
         copy.pedestalFightTime = pedestalFightTime;
         copy.pedestalThroughWalls = pedestalThroughWalls;
         copy.adaptiveCrystalTimer = adaptiveCrystalTimer;
+        copy.ritualTimings = ritualTimings.copy();
         copy.crystalSpawnSeconds = crystalSpawnSeconds;
         copy.callingSpawnSeconds = callingSpawnSeconds;
         copy.pedestalScale = pedestalScale;
@@ -39,6 +42,8 @@ public final class FarmingPreferences {
     }
 
     public void validate() {
+        if (ritualTimings == null) ritualTimings = new RitualTimings();
+        ritualTimings.validate();
         crystalSpawnSeconds = Math.clamp(crystalSpawnSeconds, 10, 60);
         callingSpawnSeconds = Math.clamp(callingSpawnSeconds, 10, 60);
         pedestalRange = Math.clamp(pedestalRange, 16, 128);

@@ -19,7 +19,7 @@ Joining mid-fight can recover tracking from fresh boss activity, but the origina
 
 A fresh completed ritual interrupts a stale fight when its death message was missed, allowing the next countdown to start. A real death and qualifying personal damage can recover the subsequent result when its spawn dialogue was missed; its original spawn time stays unknown. Elapsed time is shown as **HH:MM:SS**, with hours continuing past 24.
 
-The optional pedestal countdown is a separate **estimate**, marked with `~`, starting from a detected placement. Adaptive Crystal timing can adjust the estimate using nearby ritual particles; absent observations keep the configured fallback. It stops on the actual spawn signal. A countdown reaching zero never starts the active clock, creates a spawn marker, or counts a kill. See [Farming cues](farming.md#pedestal-countdown) for timing and label settings.
+The optional pedestal countdown is a separate **estimate**, marked with `~`, starting from a detected placement. Learned timing uses recent confirmed placement-to-spawn observations separately for Crystals and Callings; fewer than three observations keep the configured fallback. It stops on the actual spawn signal. A countdown reaching zero never starts the active clock, creates a spawn marker, or counts a kill. See [Farming cues](farming.md#pedestal-countdown) for timing and label settings.
 
 ## Profit and hourly rates
 
